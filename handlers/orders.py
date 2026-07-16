@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, FSInputFile, CallbackQuery
@@ -51,9 +51,10 @@ class OrderFSM(StatesGroup):
 processing_data: dict[int, dict] = {}
 
 
-@router.message(Command("check"))
-async def cmd_check_orders(message: Message):
-    """Ручная проверка новых заказов."""
+# --- Вспомогательная функция для проверки заказов ---
+
+async def _check_orders_logic(message: Message):
+    """Общая логика проверки заказов (используется из разных мест)."""
     user_id = message.from_user.id
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
@@ -108,6 +109,14 @@ async def cmd_check_orders(message: Message):
         await message.answer(f"❌ Ошибка: {e}", parse_mode="HTML")
     finally:
         await client.close()
+
+
+# --- Обработчики команд, работающие в любом состоянии FSM ---
+
+@router.message(StateFilter("*"), Command("check"))
+async def cmd_check_orders_any_state(message: Message, state: FSMContext):
+    """Ручная проверка новых заказов в любом состоянии."""
+    await _check_orders_logic(message)
 
 
 # --- Callback-обработчики для inline-кнопок ---
@@ -273,13 +282,13 @@ async def cb_cancel_supply(callback: CallbackQuery):
 async def cb_check_orders(callback: CallbackQuery):
     """Проверить заказы (inline-кнопка)."""
     await callback.answer()
-    await cmd_check_orders(callback.message)
+    await _check_orders_logic(callback.message)
 
 
 @router.message(F.text == "🔍 Проверить заказы")
 async def msg_check_orders_button(message: Message):
     """Проверить заказы (из reply-кнопки)."""
-    await cmd_check_orders(message)
+    await _check_orders_logic(message)
 
 
 # --- Обработчик: Создать поставку (reply-кнопка) ---
@@ -316,6 +325,18 @@ async def msg_create_supply(message: Message, state: FSMContext):
 
     # Создаём поставку сразу
     await proceed_create_supply(message, user_id, api_key, order_id, DESTINATION_OFFICE_ID)
+
+
+@router.message(OrderFSM.waiting_for_office_id, F.text.startswith("/"))
+async def process_office_id_command(message: Message, state: FSMContext):
+    """Обработка команды в состоянии ввода ID офиса."""
+    await message.answer(
+        "⚠️ <b>Вы ввели команду, но сейчас ожидается ID офиса приёмки.</b>\n\n"
+        "Если хотите отменить ввод, нажмите «Главное меню».",
+        parse_mode="HTML",
+        reply_markup=get_main_reply_keyboard()
+    )
+    await state.clear()
 
 
 @router.message(OrderFSM.waiting_for_office_id)
