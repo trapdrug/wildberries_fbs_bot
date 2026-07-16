@@ -13,7 +13,7 @@ def get_create_supply_keyboard(order_id: int) -> InlineKeyboardMarkup:
         text="❌ Пропустить",
         callback_data=f"skip_order:{order_id}"
     )
-    builder.adjust(1)
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -64,7 +64,7 @@ def get_order_items_keyboard(
         callback_data=f"cancel_supply:{supply_id}:{order_id}"
     )
 
-    builder.adjust(1)
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -79,7 +79,7 @@ def get_confirm_keyboard(supply_id: str, order_id: int) -> InlineKeyboardMarkup:
         text="❌ Отмена",
         callback_data=f"cancel_supply:{supply_id}:{order_id}"
     )
-    builder.adjust(1)
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -94,7 +94,7 @@ def get_add_more_keyboard(supply_id: str, order_id: int) -> InlineKeyboardMarkup
         text="✅ Подтвердить поставку",
         callback_data=f"confirm_supply:{supply_id}:{order_id}"
     )
-    builder.adjust(1)
+    builder.adjust(2)
     return builder.as_markup()
 
 
