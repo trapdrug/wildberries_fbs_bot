@@ -7,7 +7,7 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message, FSInputFile, CallbackQuery
 
 from config import POLL_INTERVAL, DESTINATION_OFFICE_ID, STICKERS_DIR
 from storage.user_storage import get_storage
@@ -108,6 +108,172 @@ async def cmd_check_orders(message: Message):
         await message.answer(f"❌ Ошибка: {e}", parse_mode="HTML")
     finally:
         await client.close()
+
+
+# --- Callback-обработчики для inline-кнопок ---
+
+@router.callback_query(F.data.startswith("create_supply:"))
+async def cb_create_supply(callback: CallbackQuery):
+    """Обработчик inline-кнопки 'Создать поставку' из уведомления о новом заказе."""
+    await callback.answer()  # Отвечаем на callback
+
+    user_id = callback.from_user.id
+    storage = get_storage()
+    api_key = storage.get_api_key(user_id)
+
+    if not api_key:
+        await callback.message.answer("❌ API-ключ не найден. Используйте /set_key")
+        return
+
+    # Получаем order_id из callback_data
+    try:
+        order_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError):
+        await callback.message.answer("❌ Ошибка: неверный ID заказа.")
+        return
+
+    # Если не указан officeId по умолчанию — запрашиваем
+    if DESTINATION_OFFICE_ID == 0:
+        processing_data[user_id] = {
+            "order_id": order_id,
+            "pending_create": True,
+        }
+        await callback.message.answer(
+            "🏢 <b>Укажите ID офиса приёмки Wildberries</b>\n\n"
+            "Это номер офиса, куда вы будете привозить товар.\n"
+            "Его можно найти в личном кабинете WB в разделе поставок.\n\n"
+            "Введите число:",
+            parse_mode="HTML",
+            reply_markup=remove_keyboard
+        )
+        return
+
+    # Создаём поставку сразу
+    await proceed_create_supply(callback.message, user_id, api_key, order_id, DESTINATION_OFFICE_ID)
+
+
+@router.callback_query(F.data.startswith("skip_order:"))
+async def cb_skip_order(callback: CallbackQuery):
+    """Обработчик inline-кнопки 'Пропустить' из уведомления о новом заказе."""
+    await callback.answer()
+
+    user_id = callback.from_user.id
+    if user_id in processing_data:
+        del processing_data[user_id]
+
+    await callback.message.answer(
+        "⏭ Заказ пропрошен.\n"
+        "Я продолжу отслеживать новые заказы.",
+        reply_markup=get_main_reply_keyboard()
+    )
+
+
+@router.callback_query(F.data.startswith("add_item:"))
+async def cb_add_item(callback: CallbackQuery):
+    """Добавить отдельный товар в поставку (inline-кнопка)."""
+    await callback.answer()
+
+    user_id = callback.from_user.id
+    if user_id not in processing_data:
+        await callback.message.answer("❌ Нет активной поставки.")
+        return
+
+    try:
+        parts = callback.data.split(":")
+        supply_id = parts[1]
+        order_id = int(parts[2])
+        nm_id = int(parts[3])
+    except (IndexError, ValueError):
+        await callback.message.answer("❌ Ошибка: неверные параметры.")
+        return
+
+    storage = get_storage()
+    api_key = storage.get_api_key(user_id)
+
+    if not api_key:
+        await callback.message.answer("❌ API-ключ не найден.")
+        return
+
+    client = WBApiClient(api_key)
+    try:
+        await client.add_order_to_supply(supply_id, order_id)
+        processing_data[user_id]["added_items"].add(nm_id)
+
+        # Обновляем storage
+        user_data = storage.get_user(user_id)
+        if order_id not in user_data.added_order_ids:
+            user_data.added_order_ids.append(order_id)
+        storage.save_user(user_id, user_data)
+
+        await callback.message.answer(
+            f"✅ Товар {nm_id} добавлен в поставку.",
+            reply_markup=get_supply_items_reply_keyboard()
+        )
+    except ConflictError:
+        await callback.message.answer("⚠️ Этот заказ уже добавлен в поставку.")
+    except Exception as e:
+        logger.error(f"Ошибка добавления товара: {e}")
+        await callback.message.answer(f"❌ Ошибка: {e}")
+    finally:
+        await client.close()
+
+
+@router.callback_query(F.data.startswith("add_all:"))
+async def cb_add_all(callback: CallbackQuery):
+    """Добавить все товары в поставку (inline-кнопка)."""
+    await callback.answer()
+
+    user_id = callback.from_user.id
+    if user_id not in processing_data:
+        await callback.message.answer("❌ Нет активной поставки.")
+        return
+
+    try:
+        parts = callback.data.split(":")
+        supply_id = parts[1]
+        order_id = int(parts[2])
+    except (IndexError, ValueError):
+        await callback.message.answer("❌ Ошибка: неверные параметры.")
+        return
+
+    # Перенаправляем на reply-обработчик
+    await msg_add_all(callback.message)
+
+
+@router.callback_query(F.data.startswith("confirm_supply:"))
+async def cb_confirm_supply(callback: CallbackQuery):
+    """Подтвердить поставку (inline-кнопка)."""
+    await callback.answer()
+
+    user_id = callback.from_user.id
+    if user_id not in processing_data:
+        await callback.message.answer("❌ Нет активной поставки.")
+        return
+
+    # Перенаправляем на reply-обработчик
+    await msg_confirm_supply(callback.message)
+
+
+@router.callback_query(F.data.startswith("cancel_supply:"))
+async def cb_cancel_supply(callback: CallbackQuery):
+    """Отменить поставку (inline-кнопка)."""
+    await callback.answer()
+
+    user_id = callback.from_user.id
+    if user_id in processing_data:
+        del processing_data[user_id]
+
+    await callback.message.answer(
+        "❌ Поставка отменена.",
+        reply_markup=get_main_reply_keyboard()
+    )
+
+
+@router.callback_query(F.data == "check_orders")
+async def cb_check_orders(callback: CallbackQuery):
+    """Проверить заказы (inline-кнопка)."""
+    await callback.answer()
+    await cmd_check_orders(callback.message)
 
 
 @router.message(F.text == "🔍 Проверить заказы")
