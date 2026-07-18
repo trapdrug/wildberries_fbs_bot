@@ -18,88 +18,105 @@ def get_create_supply_keyboard(order_id: int) -> InlineKeyboardMarkup:
 
 
 def get_order_items_keyboard(
-    order_items: list[dict],
-    supply_id: str,
-    order_id: int,
-    added_nm_ids: set[int] = None
+    items: list[dict],
+    order_details: dict,
+    selected_orders: set[int],
 ) -> InlineKeyboardMarkup:
     """
-    Клавиатура со списком товаров в заказе для добавления в поставку.
-    Каждая кнопка — товар (nmId). Добавленные товары помечаются галочкой.
+    Клавиатура с чекбоксами товаров.
+    Каждый товар — кнопка с переключением выбора.
+    Кнопка «Далее» только если выбраны товары.
     """
-    if added_nm_ids is None:
-        added_nm_ids = set()
-
     builder = InlineKeyboardBuilder()
 
-    for item in order_items:
-        nm_id = item.get("nmId", 0)
-        barcode = item.get("barcode", "—")
-        skus = item.get("skus", [])
-        sku = skus[0] if skus else "—"
-        added = "✅ " if nm_id in added_nm_ids else ""
-
-        # Показываем nmId и первые символы баркода
-        text = f"{added}Товар {nm_id} ({barcode[:10]}...)"
+    for item in items:
+        item_id = item.get("id")
+        nm_id = item.get("nmId")
+        detail = order_details.get(nm_id, {})
+        subject = detail.get("subject") or f"Товар {nm_id}"
+        checked = "✅" if item_id in selected_orders else "⬜"
         builder.button(
-            text=text,
-            callback_data=f"add_item:{supply_id}:{order_id}:{nm_id}"
+            text=f"{checked} {subject}",
+            callback_data=f"toggle_item:{item_id}"
         )
 
-    # Кнопка "Добавить все товары"
-    builder.button(
-        text="📥 Добавить все",
-        callback_data=f"add_all:{supply_id}:{order_id}"
-    )
-
-    # Кнопка подтверждения
-    builder.button(
-        text="✅ Подтвердить",
-        callback_data=f"confirm_supply:{supply_id}:{order_id}"
-    )
-
-    # Кнопка отмены
-    builder.button(
-        text="❌ Отменить",
-        callback_data=f"cancel_supply:{supply_id}:{order_id}"
-    )
+    # Кнопка "Далее" доступна только если есть выбранные товары
+    if selected_orders:
+        builder.button(
+            text="➡️ Далее",
+            callback_data="next_to_trbx"
+        )
+    else:
+        builder.button(
+            text="⬜ Выберите товары",
+            callback_data="noop"
+        )
 
     builder.adjust(2)
     return builder.as_markup()
 
 
-def get_confirm_keyboard(supply_id: str, order_id: int) -> InlineKeyboardMarkup:
-    """Клавиатура для подтверждения создания поставки."""
+def get_trbx_keyboard(supply_id: str, trbx_list: list[dict]) -> InlineKeyboardMarkup:
+    """
+    Клавиатура управления грузоместами.
+    """
+    builder = InlineKeyboardBuilder()
+
+    for trbx in trbx_list:
+        num = trbx.get("number", "?")
+        trbx_id = trbx.get("id", "")
+        builder.button(
+            text=f"❌ Грузоместо #{num}",
+            callback_data=f"del_trbx:{trbx_id}"
+        )
+
+    builder.button(
+        text="➕ Добавить грузоместо",
+        callback_data=f"add_trbx:{supply_id}"
+    )
+
+    if trbx_list:
+        builder.button(
+            text="✅ Завершить",
+            callback_data="finish_supply"
+        )
+
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def get_confirm_supply_keyboard(supply_id: str) -> InlineKeyboardMarkup:
+    """Клавиатура подтверждения поставки."""
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="✅ Подтвердить поставку",
-        callback_data=f"confirm_supply:{supply_id}:{order_id}"
+        text="✅ Завершить поставку",
+        callback_data="finish_supply"
     )
     builder.button(
-        text="❌ Отмена",
-        callback_data=f"cancel_supply:{supply_id}:{order_id}"
+        text="📦 Добавить грузоместо",
+        callback_data=f"add_trbx:{supply_id}"
     )
     builder.adjust(2)
     return builder.as_markup()
 
 
-def get_add_more_keyboard(supply_id: str, order_id: int) -> InlineKeyboardMarkup:
-    """Клавиатура: добавить ещё товары или подтвердить."""
+def get_supply_items_keyboard(supply_id: str, order_ids: list[int]) -> InlineKeyboardMarkup:
+    """Клавиатура для списка товаров в поставке."""
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="📥 Добавить ещё товары",
-        callback_data=f"show_items:{supply_id}:{order_id}"
+        text="📦 Добавить грузоместо",
+        callback_data=f"add_trbx:{supply_id}"
     )
     builder.button(
-        text="✅ Подтвердить поставку",
-        callback_data=f"confirm_supply:{supply_id}:{order_id}"
+        text="✅ Завершить",
+        callback_data="finish_supply"
     )
     builder.adjust(2)
     return builder.as_markup()
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
-    """Главное меню после успешной поставки."""
+    """Главное меню."""
     builder = InlineKeyboardBuilder()
     builder.button(
         text="🔍 Проверить новые заказы",
