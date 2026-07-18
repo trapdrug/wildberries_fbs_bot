@@ -46,8 +46,8 @@ class PollingManager:
                                 storage = get_storage()
                                 user_data = storage.get_user(user_id)
 
-                                # Пропускаем, если заказ уже обрабатывается
-                                if order_id in user_data.added_order_ids:
+                                # Пропускаем, если заказ уже обрабатывается или о нём уже уведомили
+                                if order_id in user_data.added_order_ids or order_id in user_data.notified_order_ids:
                                     continue
 
                                 nm_id = order.get("nmId", "?")
@@ -65,6 +65,10 @@ class PollingManager:
                                     parse_mode="HTML",
                                     reply_markup=get_create_supply_keyboard(order_id)
                                 )
+
+                                # Сохраняем ID заказа в список уведомлённых, чтобы не дублировать
+                                user_data.notified_order_ids.append(order_id)
+                                storage.save_user(user_id, user_data)
 
                     await asyncio.sleep(poll_interval)
 

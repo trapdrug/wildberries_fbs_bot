@@ -69,4 +69,5 @@ class UserData(BaseModel):
     supply_id: Optional[str] = None
     current_order_id: Optional[int] = None
     added_order_ids: list[int] = []
+    notified_order_ids: list[int] = []  # ID заказов, о которых уже уведомили
     confirmed: bool = False
