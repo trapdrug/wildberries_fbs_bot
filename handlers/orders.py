@@ -72,11 +72,33 @@ async def _check_orders_logic(message: Message):
     try:
         orders = await client.get_new_orders()
         if orders:
+            # Получаем детальную информацию о товарах
+            nm_ids = [o.get("nmId") for o in orders if o.get("nmId")]
+            order_details = {}
+            if nm_ids:
+                try:
+                    details = await client.get_orders_status(nm_ids)
+                    for d in details:
+                        nm = d.get("nmId")
+                        if nm:
+                            order_details[nm] = d
+                except Exception as e:
+                    logger.warning(f"Не удалось получить детали заказов: {e}")
+
             text = f"<b>Найдено заказов: {len(orders)}</b>\n\n"
             for order in orders:
                 order_id = order.get("id")
                 nm_id = order.get("nmId", "?")
-                text += f"• Заказ <code>{order_id}</code> — товар {nm_id}\n"
+                detail = order_details.get(nm_id, {})
+                subject = detail.get("subject") or "—"
+                brand = detail.get("brand") or "—"
+                color = detail.get("color") or "—"
+                supplier_article = detail.get("supplierArticle") or "—"
+                text += (
+                    f"• Заказ <code>{order_id}</code>\n"
+                    f"  📦 {subject} ({brand})\n"
+                    f"  🎨 {color} | 📄 {supplier_article}\n\n"
+                )
 
             await message.answer(text, parse_mode="HTML")
 
@@ -412,15 +434,36 @@ async def proceed_create_supply(msg, user_id: int, api_key: str, order_id: int, 
         user_data.current_order_id = order_id
         storage.save_user(user_id, user_data)
 
+        # Получаем детальную информацию о товаре
+        nm_id = current_order.get("nmId")
+        detail = {}
+        if nm_id:
+            try:
+                details = await client.get_orders_status([nm_id])
+                if details:
+                    detail = details[0]
+            except Exception as e:
+                logger.warning(f"Не удалось получить детали товара {nm_id}: {e}")
+
+        subject = detail.get("subject") or "—"
+        brand = detail.get("brand") or "—"
+        color = detail.get("color") or "—"
+        supplier_article = detail.get("supplierArticle") or "—"
+        tech_size = detail.get("techSize") or "—"
+        total_price = current_order.get("totalPrice", "—")
+
         # 5. Показываем информацию о поставке с reply-клавиатурой
         await msg.answer(
             f"✅ <b>Поставка создана!</b>\n\n"
             f"📦 ID поставки: <code>{supply_id}</code>\n"
             f"🆔 Заказ: <code>{order_id}</code>\n\n"
             f"<b>Товары в заказе:</b>\n"
-            f"• nmId: <code>{current_order.get('nmId', '?')}</code>\n"
-            f"• Баркод: {current_order.get('barcode', '—')}\n"
-            f"• Цена: {current_order.get('totalPrice', '—')} ₽\n\n"
+            f"🔖 Название: {subject}\n"
+            f"🏷 Бренд: {brand}\n"
+            f"🎨 Цвет: {color}\n"
+            f"📐 Размер: {tech_size}\n"
+            f"📄 Артикул: {supplier_article}\n"
+            f"💰 Цена: {total_price} ₽\n\n"
             "Используйте кнопки ниже для управления:",
             parse_mode="HTML",
             reply_markup=get_supply_items_reply_keyboard()

@@ -40,6 +40,19 @@ class PollingManager:
                 try:
                     orders = await client.get_new_orders()
                     if orders and self._bot:
+                        # Получаем детальную информацию о товарах (название, цвет, артикул)
+                        nm_ids = [o.get("nmId") for o in orders if o.get("nmId")]
+                        order_details = {}
+                        if nm_ids:
+                            try:
+                                details = await client.get_orders_status(nm_ids)
+                                for d in details:
+                                    nm = d.get("nmId")
+                                    if nm:
+                                        order_details[nm] = d
+                            except Exception as e:
+                                logger.warning(f"Не удалось получить детали заказов: {e}")
+
                         for order in orders:
                             order_id = order.get("id")
                             if order_id:
@@ -51,16 +64,24 @@ class PollingManager:
                                     continue
 
                                 nm_id = order.get("nmId", "?")
-                                skus = order.get("skus", [])
-                                sku = skus[0] if skus else "—"
+                                detail = order_details.get(nm_id, {})
+                                subject = detail.get("subject") or "—"
+                                brand = detail.get("brand") or "—"
+                                color = detail.get("color") or "—"
+                                supplier_article = detail.get("supplierArticle") or "—"
+                                tech_size = detail.get("techSize") or "—"
+                                total_price = order.get("totalPrice", "—")
 
                                 await self._bot.send_message(
                                     user_id,
                                     f"🆕 <b>Новый заказ!</b>\n\n"
                                     f"📦 ID заказа: <code>{order_id}</code>\n"
-                                    f"🔖 Товар (nmId): <code>{nm_id}</code>\n"
-                                    f"🏷 SKU: {sku}\n"
-                                    f"💰 Цена: {order.get('totalPrice', '—')} ₽\n\n"
+                                    f"🔖 Название: {subject}\n"
+                                    f"🏷 Бренд: {brand}\n"
+                                    f"🎨 Цвет: {color}\n"
+                                    f"📐 Размер: {tech_size}\n"
+                                    f"📄 Артикул: {supplier_article}\n"
+                                    f"💰 Цена: {total_price} ₽\n\n"
                                     "Создайте поставку, чтобы отправить товар в Wildberries.",
                                     parse_mode="HTML",
                                     reply_markup=get_create_supply_keyboard(order_id)
