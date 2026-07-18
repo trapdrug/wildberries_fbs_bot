@@ -6,6 +6,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 API_HOST = "https://marketplace-api.wildberries.ru"
 API_VERSION = "v3"
+API_MARKETPLACE_HOST = "https://marketplace-api.wildberries.ru/api/marketplace"
+MARKETPLACE_VERSION = "v3"
 
 # Настройки опроса новых заказов (в секундах)
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))

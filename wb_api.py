@@ -126,6 +126,134 @@ class WBApiClient:
         data = await self._request("GET", "orders/new")
         return data.get("orders", [])
 
+    async def get_orders(self, **params) -> list[dict]:
+        """
+        Получить список сборочных заданий с фильтрами.
+        GET /api/v3/orders
+        """
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        path = f"orders?{query}" if query else "orders"
+        data = await self._request("GET", path)
+        return data.get("orders", [])
+
+    async def get_orders_client(self, order_ids: list[int]) -> list[dict]:
+        """
+        Получить информацию о клиентах по заказам.
+        POST /api/v3/orders/client
+        """
+        if not order_ids:
+            return []
+        payload = {"orderIds": order_ids}
+        data = await self._request("POST", "orders/client", json=payload)
+        return data
+    
+    async def get_supplies(self) -> list[dict]:
+        """
+        Получить список поставок.
+        GET /api/v3/supplies
+        """
+        data = await self._request("GET", "supplies")
+        return data.get("supplies", [])
+
+    async def get_supply_info(self, supply_id: str) -> dict:
+        """
+        Получить информацию о поставке.
+        GET /api/v3/supplies/{supplyId}
+        """
+        path = f"supplies/{supply_id}"
+        return await self._request("GET", path)
+
+    async def get_supply_order_ids(self, supply_id: str) -> list[int]:
+        """
+        Получить ID сборочных заданий в поставке.
+        GET /api/marketplace/v3/supplies/{supplyId}/order-ids
+        """
+        path = f"supplies/{supply_id}/order-ids"
+        # Используем marketplace base
+        data = await self._request("GET", path)
+        return data.get("orderIds", [])
+
+    async def get_supply_barcode(self, supply_id: str) -> Optional[str]:
+        """
+        Получить QR-код поставки (base64).
+        GET /api/v3/supplies/{supplyId}/barcode
+        """
+        path = f"supplies/{supply_id}/barcode"
+        data = await self._request("GET", path)
+        file_b64 = data.get("file")
+        if file_b64:
+            return base64.b64decode(file_b64)
+        return None
+
+    async def delete_supply(self, supply_id: str) -> dict:
+        """
+        Удалить поставку.
+        DELETE /api/v3/supplies/{supplyId}
+        """
+        path = f"supplies/{supply_id}"
+        return await self._request("DELETE", path)
+
+    async def add_orders_to_supply(self, supply_id: str, order_ids: list[int]) -> dict:
+        """
+        Добавить сборочные задания к поставке (замена всех).
+        PATCH /api/marketplace/v3/supplies/{supplyId}/orders
+        """
+        path = f"supplies/{supply_id}/orders"
+        payload = {"orderIds": order_ids}
+        return await self._request("PATCH", path, json=payload)
+
+    async def create_trbx(self, supply_id: str) -> dict:
+        """
+        Создать грузоместо в поставке.
+        POST /api/v3/supplies/{supplyId}/trbx
+        """
+        path = f"supplies/{supply_id}/trbx"
+        return await self._request("POST", path, json={})
+
+    async def delete_trbx(self, supply_id: str, trbx_id: str) -> dict:
+        """
+        Удалить грузоместо из поставки.
+        DELETE /api/v3/supplies/{supplyId}/trbx
+        """
+        path = f"supplies/{supply_id}/trbx"
+        payload = {"trbxIds": [trbx_id]}
+        return await self._request("DELETE", path, json=payload)
+
+    async def get_trbx_stickers(self, supply_id: str, trbx_ids: list[str]) -> list[bytes]:
+        """
+        Получить стикеры грузомест.
+        POST /api/v3/supplies/{supplyId}/trbx/stickers
+        """
+        path = f"supplies/{supply_id}/trbx/stickers"
+        payload = {"trbxIds": trbx_ids, "type": "png"}
+        data = await self._request("POST", path, json=payload)
+        stickers = data.get("stickers", [])
+        result = []
+        for s in stickers:
+            file_b64 = s.get("file")
+            if file_b64:
+                try:
+                    result.append(base64.b64decode(file_b64))
+                except:
+                    pass
+        return result
+
+    async def get_offices(self) -> list[dict]:
+        """
+        Получить список складов (офисов) продавца.
+        GET /api/v3/offices
+        """
+        data = await self._request("GET", "offices")
+        return data.get("offices", [])
+
+    async def get_warehouses(self) -> list[dict]:
+        """
+        Получить список складов Wildberries.
+        GET /api/v3/warehouses
+        """
+        data = await self._request("GET", "warehouses")
+        return data.get("warehouses", [])
+
     async def get_orders_status(self, nm_ids: list[int]) -> list[dict]:
         """
         Получить детальную информацию о товарах (название, цвет, артикул).
@@ -186,14 +314,6 @@ class WBApiClient:
         """
         path = f"supplies/{supply_id}/deliver"
         return await self._request("PATCH", path)
-
-    async def get_supply_info(self, supply_id: str) -> dict:
-        """
-        Получить информацию о поставке.
-        GET /api/v3/supplies/{supplyId}
-        """
-        path = f"supplies/{supply_id}"
-        return await self._request("GET", path)
 
     @staticmethod
     def decode_sticker_file(sticker_data: dict) -> Optional[bytes]:
