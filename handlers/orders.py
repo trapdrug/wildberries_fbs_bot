@@ -19,6 +19,7 @@ from wb_api import (
     RateLimitError,
     WildberriesAPIError,
 )
+from keyboards.inline import get_create_supply_keyboard
 from keyboards.reply import (
     get_main_reply_keyboard,
     get_check_orders_reply_keyboard,
@@ -70,7 +71,7 @@ async def _check_orders_logic(message: Message):
     try:
         orders = await client.get_new_orders()
         if orders:
-            # Получаем детальную информацию о товарах
+            # Получаем детальную информацию о товарах (название, цвет, артикул)
             nm_ids = [o.get("nmId") for o in orders if o.get("nmId")]
             order_details = {}
             if nm_ids:
@@ -83,36 +84,55 @@ async def _check_orders_logic(message: Message):
                 except Exception as e:
                     logger.warning(f"Не удалось получить детали заказов: {e}")
 
-            text = f"<b>Найдено заказов: {len(orders)}</b>\n\n"
+            new_orders_found = 0
             for order in orders:
                 order_id = order.get("id")
+                if not order_id:
+                    continue
+
+                # Пропускаем, если уже уведомляли или обработали
+                user_data = storage.get_user(user_id)
+                if order_id in user_data.added_order_ids or order_id in user_data.notified_order_ids:
+                    continue
+
+                new_orders_found += 1
                 nm_id = order.get("nmId", "?")
                 detail = order_details.get(nm_id, {})
                 subject = detail.get("subject") or "—"
-                brand = detail.get("brand") or "—"
                 color = detail.get("color") or "—"
                 supplier_article = detail.get("supplierArticle") or "—"
-                text += (
-                    f"• Заказ <code>{order_id}</code>\n"
-                    f"  📦 {subject} ({brand})\n"
-                    f"  🎨 {color} | 📄 {supplier_article}\n\n"
+                total_price = order.get("totalPrice", "—")
+
+                # Отправляем такое же уведомление, как и при автоматической проверке
+                await message.answer(
+                    f"🆕 <b>Новый заказ!</b>\n\n"
+                    f"📦 ID заказа: <code>{order_id}</code>\n"
+                    f"🔖 Название: {subject}\n"
+                    f"🎨 Цвет: {color}\n"
+                    f"📄 Артикул: {supplier_article}\n"
+                    f"💰 Цена: {total_price} ₽\n\n"
+                    "Создайте поставку, чтобы отправить товар в Wildberries.",
+                    parse_mode="HTML",
+                    reply_markup=get_create_supply_keyboard(order_id)
                 )
 
-            await message.answer(text, parse_mode="HTML")
+                # Сохраняем ID заказа в список уведомлённых
+                user_data.notified_order_ids.append(order_id)
+                storage.save_user(user_id, user_data)
 
-            # Сохраняем первый заказ для создания поставки
-            first_order = orders[0]
-            first_order_id = first_order.get("id")
-            processing_data[user_id] = {
-                "order_id": first_order_id,
-                "pending_create": True,
-            }
+                # Сохраняем первый заказ в processing_data для reply-кнопки
+                if new_orders_found == 1:
+                    processing_data[user_id] = {
+                        "order_id": order_id,
+                        "pending_create": True,
+                    }
 
-            # Reply-клавиатура: Создать поставку / Пропустить
-            await message.answer(
-                "Создать поставку для первого заказа?",
-                reply_markup=get_check_orders_reply_keyboard()
-            )
+            if new_orders_found == 0:
+                await message.answer(
+                    "✅ Новых заказов нет.",
+                    parse_mode="HTML",
+                    reply_markup=get_main_reply_keyboard()
+                )
         else:
             await message.answer(
                 "✅ Новых заказов нет.",

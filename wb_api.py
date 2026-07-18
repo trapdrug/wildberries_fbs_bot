@@ -128,13 +128,13 @@ class WBApiClient:
 
     async def get_orders_status(self, nm_ids: list[int]) -> list[dict]:
         """
-        Получить детальную информацию о товарах (название, цвет, артикул, бренд, размер).
-        GET /api/v3/orders/status?nmIds=...
+        Получить детальную информацию о товарах (название, цвет, артикул).
+        POST /api/v3/orders/status
         """
         if not nm_ids:
             return []
-        nm_ids_str = ",".join(str(nm) for nm in nm_ids)
-        data = await self._request("GET", f"orders/status?nmIds={nm_ids_str}")
+        payload = {"nmIds": nm_ids}
+        data = await self._request("POST", "orders/status", json=payload)
         return data.get("orders", [])
 
     async def create_supply(self) -> dict:
