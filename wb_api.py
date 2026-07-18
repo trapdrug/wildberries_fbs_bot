@@ -126,15 +126,24 @@ class WBApiClient:
         data = await self._request("GET", "orders/new")
         return data.get("orders", [])
 
-    async def create_supply(self, destination_office_id: int) -> dict:
+    async def get_orders_status(self, nm_ids: list[int]) -> list[dict]:
+        """
+        Получить детальную информацию о товарах (название, цвет, артикул, бренд, размер).
+        GET /api/v3/orders/status?nmIds=...
+        """
+        if not nm_ids:
+            return []
+        nm_ids_str = ",".join(str(nm) for nm in nm_ids)
+        data = await self._request("GET", f"orders/status?nmIds={nm_ids_str}")
+        return data.get("orders", [])
+
+    async def create_supply(self) -> dict:
         """
         Создать новую поставку.
         POST /api/v3/supplies
+        ID офиса приёмки определяется автоматически WB.
         """
-        payload = {
-            "destinationOfficeId": destination_office_id
-        }
-        return await self._request("POST", "supplies", json=payload)
+        return await self._request("POST", "supplies", json={})
 
     async def add_order_to_supply(self, supply_id: str, order_id: int) -> dict:
         """

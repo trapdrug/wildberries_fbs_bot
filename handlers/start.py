@@ -1,7 +1,7 @@
 import logging
 
 from aiogram import Router, F
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
@@ -56,10 +56,9 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.set_state(Form.waiting_for_api_key)
 
 
-@router.message(Command("help"))
 @router.message(F.text == "❓ Помощь")
-async def cmd_help(message: Message):
-    """Обработчик команды /help и кнопки Помощь."""
+async def cmd_help_button(message: Message):
+    """Обработчик кнопки Помощь (только в главном меню)."""
     help_text = (
         "📋 <b>Доступные команды:</b>\n\n"
         "/start — Начать работу\n"
@@ -77,10 +76,9 @@ async def cmd_help(message: Message):
     await message.answer(help_text, parse_mode="HTML", reply_markup=get_main_reply_keyboard())
 
 
-@router.message(Command("set_key"))
 @router.message(F.text == "🔑 Сменить API-ключ")
-async def cmd_set_key(message: Message, state: FSMContext):
-    """Сменить API-ключ."""
+async def cmd_set_key_button(message: Message, state: FSMContext):
+    """Сменить API-ключ (только в главном меню)."""
     await message.answer(
         "🔑 Введите новый API-ключ Wildberries:\n\n"
         "<i>Отправьте ключ одним сообщением.</i>",
@@ -100,9 +98,32 @@ async def go_main_menu(message: Message):
     )
 
 
-@router.message(Command("status"))
-async def cmd_status(message: Message):
-    """Проверить статус подключения к API."""
+# --- Обработчики команд, работающие в любом состоянии FSM ---
+
+@router.message(StateFilter("*"), Command("help"))
+async def cmd_help_any_state(message: Message, state: FSMContext):
+    """Обработчик /help в любом состоянии."""
+    await state.clear()  # Сбрасываем состояние
+    help_text = (
+        "📋 <b>Доступные команды:</b>\n\n"
+        "/start — Начать работу\n"
+        "/help — Показать эту справку\n"
+        "/set_key — Сменить API-ключ\n"
+        "/check — Проверить новые заказы вручную\n"
+        "/status — Статус подключения к API\n\n"
+        "<b>Как это работает:</b>\n"
+        "1. Вы вводите API-ключ Wildberries\n"
+        "2. Бот автоматически проверяет новые заказы каждые 30 сек\n"
+        "3. При появлении заказа — бот предлагает создать поставку\n"
+        "4. Вы добавляете товары в поставку и подтверждаете\n"
+        "5. Бот генерирует QR-код поставки и штрих-коды заказов в PDF"
+    )
+    await message.answer(help_text, parse_mode="HTML", reply_markup=get_main_reply_keyboard())
+
+
+@router.message(StateFilter("*"), Command("status"))
+async def cmd_status_any_state(message: Message, state: FSMContext):
+    """Проверить статус подключения к API в любом состоянии."""
     user_id = message.from_user.id
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
@@ -131,6 +152,19 @@ async def cmd_status(message: Message):
             )
     finally:
         await client.close()
+
+
+@router.message(StateFilter("*"), Command("set_key"))
+async def cmd_set_key_any_state(message: Message, state: FSMContext):
+    """Сменить API-ключ в любом состоянии."""
+    await state.clear()
+    await message.answer(
+        "🔑 Введите новый API-ключ Wildberries:\n\n"
+        "<i>Отправьте ключ одним сообщением.</i>",
+        parse_mode="HTML",
+        reply_markup=remove_keyboard
+    )
+    await state.set_state(Form.waiting_for_api_key)
 
 
 @router.message(Form.waiting_for_api_key)
