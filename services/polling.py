@@ -14,7 +14,6 @@ if _PROJECT_ROOT not in sys.path:
 from wb_api import WBApiClient, AuthError, RateLimitError
 from storage.user_storage import get_storage
 from keyboards.inline import get_create_supply_keyboard
-
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +77,8 @@ class PollingManager:
                                     f"🎨 Цвет: {color}\n"
                                     f"📄 Артикул: {supplier_article}\n"
                                     f"💰 Цена: {total_price} ₽\n\n"
-                                    "Создайте поставку, чтобы отправить товар в Wildberries.",
+                                    "Создайте поставку.\n\n"
+                                    "🔙 <i>Главное меню</i>",
                                     parse_mode="HTML",
                                     reply_markup=get_create_supply_keyboard(order_id)
                                 )

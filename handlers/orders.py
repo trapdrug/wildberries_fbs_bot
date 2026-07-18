@@ -104,7 +104,8 @@ async def _check_orders_logic(message):
                     f"🎨 Цвет: {d.get('color','—')}\n"
                     f"📄 Артикул: {d.get('supplierArticle','—')}\n"
                     f"💰 Цена: {order.get('totalPrice','—')} ₽\n\n"
-                    "Создайте поставку.",
+                    "Создайте поставку.\n\n"
+                    "🔙 <i>Главное меню</i>",
                     parse_mode="HTML",
                     reply_markup=get_create_supply_keyboard(oid)
                 )
