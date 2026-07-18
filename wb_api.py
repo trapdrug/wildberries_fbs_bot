@@ -137,15 +137,13 @@ class WBApiClient:
         data = await self._request("GET", f"orders/status?nmIds={nm_ids_str}")
         return data.get("orders", [])
 
-    async def create_supply(self, destination_office_id: int) -> dict:
+    async def create_supply(self) -> dict:
         """
         Создать новую поставку.
         POST /api/v3/supplies
+        ID офиса приёмки определяется автоматически WB.
         """
-        payload = {
-            "destinationOfficeId": destination_office_id
-        }
-        return await self._request("POST", "supplies", json=payload)
+        return await self._request("POST", "supplies", json={})
 
     async def add_order_to_supply(self, supply_id: str, order_id: int) -> dict:
         """

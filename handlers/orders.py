@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, FSInputFile, CallbackQuery
 
-from config import POLL_INTERVAL, DESTINATION_OFFICE_ID, STICKERS_DIR
+from config import POLL_INTERVAL, STICKERS_DIR
 from storage.user_storage import get_storage
 from wb_api import (
     WBApiClient,
@@ -39,11 +39,9 @@ sticker_gen = StickerGenerator(output_dir=STICKERS_DIR)
 class OrderFSM(StatesGroup):
     """FSM состояния для работы с заказами и поставками."""
     idle = State()
-    waiting_for_destination_office = State()
     creating_supply = State()
     selecting_items = State()
     confirming = State()
-    waiting_for_office_id = State()
 
 
 # Словарь для хранения данных о заказах в процессе обработки
@@ -163,24 +161,8 @@ async def cb_create_supply(callback: CallbackQuery):
         await callback.message.answer("❌ Ошибка: неверный ID заказа.")
         return
 
-    # Если не указан officeId по умолчанию — запрашиваем
-    if DESTINATION_OFFICE_ID == 0:
-        processing_data[user_id] = {
-            "order_id": order_id,
-            "pending_create": True,
-        }
-        await callback.message.answer(
-            "🏢 <b>Укажите ID офиса приёмки Wildberries</b>\n\n"
-            "Это номер офиса, куда вы будете привозить товар.\n"
-            "Его можно найти в личном кабинете WB в разделе поставок.\n\n"
-            "Введите число:",
-            parse_mode="HTML",
-            reply_markup=remove_keyboard
-        )
-        return
-
-    # Создаём поставку сразу
-    await proceed_create_supply(callback.message, user_id, api_key, order_id, DESTINATION_OFFICE_ID)
+    # Создаём поставку (ID офиса определяется автоматически WB)
+    await proceed_create_supply(callback.message, user_id, api_key, order_id)
 
 
 @router.callback_query(F.data.startswith("skip_order:"))
@@ -193,7 +175,7 @@ async def cb_skip_order(callback: CallbackQuery):
         del processing_data[user_id]
 
     await callback.message.answer(
-        "⏭ Заказ пропрошен.\n"
+        "⏭ Заказ пропущен.\n"
         "Я продолжу отслеживать новые заказы.",
         reply_markup=get_main_reply_keyboard()
     )
@@ -316,7 +298,7 @@ async def msg_check_orders_button(message: Message):
 # --- Обработчик: Создать поставку (reply-кнопка) ---
 
 @router.message(F.text == "📦 Создать поставку")
-async def msg_create_supply(message: Message, state: FSMContext):
+async def msg_create_supply(message: Message):
     """Создать поставку (из reply-кнопки)."""
     user_id = message.from_user.id
     storage = get_storage()
@@ -332,71 +314,18 @@ async def msg_create_supply(message: Message, state: FSMContext):
         await message.answer("❌ Нет заказа для создания поставки. Проверьте заказы сначала.")
         return
 
-    # Если не указан officeId по умолчанию — запрашиваем
-    if DESTINATION_OFFICE_ID == 0:
-        await message.answer(
-            "🏢 <b>Укажите ID офиса приёмки Wildberries</b>\n\n"
-            "Это номер офиса, куда вы будете привозить товар.\n"
-            "Его можно найти в личном кабинете WB в разделе поставок.\n\n"
-            "Введите число:",
-            parse_mode="HTML",
-            reply_markup=remove_keyboard
-        )
-        await state.set_state(OrderFSM.waiting_for_office_id)
-        return
-
-    # Создаём поставку сразу
-    await proceed_create_supply(message, user_id, api_key, order_id, DESTINATION_OFFICE_ID)
+    # Создаём поставку (ID офиса определяется автоматически WB)
+    await proceed_create_supply(message, user_id, api_key, order_id)
 
 
-@router.message(OrderFSM.waiting_for_office_id, F.text.startswith("/"))
-async def process_office_id_command(message: Message, state: FSMContext):
-    """Обработка команды в состоянии ввода ID офиса."""
-    await message.answer(
-        "⚠️ <b>Вы ввели команду, но сейчас ожидается ID офиса приёмки.</b>\n\n"
-        "Если хотите отменить ввод, нажмите «Главное меню».",
-        parse_mode="HTML",
-        reply_markup=get_main_reply_keyboard()
-    )
-    await state.clear()
-
-
-@router.message(OrderFSM.waiting_for_office_id)
-async def process_office_id(message: Message, state: FSMContext):
-    """Обработка ввода ID офиса приёмки."""
-    user_id = message.from_user.id
-    storage = get_storage()
-    api_key = storage.get_api_key(user_id)
-
-    if not api_key:
-        await message.answer("❌ API-ключ не найден. Используйте /set_key")
-        await state.clear()
-        return
-
-    try:
-        office_id = int(message.text.strip())
-    except ValueError:
-        await message.answer("❌ Пожалуйста, введите число (ID офиса приёмки).")
-        return
-
-    order_id = processing_data.get(user_id, {}).get("order_id")
-    if not order_id:
-        await message.answer("❌ Ошибка: заказ не найден. Начните заново.")
-        await state.clear()
-        return
-
-    await proceed_create_supply(message, user_id, api_key, order_id, office_id)
-    await state.clear()
-
-
-async def proceed_create_supply(msg, user_id: int, api_key: str, order_id: int, office_id: int):
+async def proceed_create_supply(msg, user_id: int, api_key: str, order_id: int):
     """Создать поставку через API."""
     await msg.answer("⏳ Создаю поставку...")
 
     client = WBApiClient(api_key)
     try:
-        # 1. Создаём поставку
-        supply_data = await client.create_supply(office_id)
+        # 1. Создаём поставку (ID офиса определяется автоматически WB)
+        supply_data = await client.create_supply()
         supply_id = supply_data.get("id")
 
         if not supply_id:
