@@ -66,10 +66,8 @@ class PollingManager:
                                 nm_id = order.get("nmId", "?")
                                 detail = order_details.get(nm_id, {})
                                 subject = detail.get("subject") or "—"
-                                brand = detail.get("brand") or "—"
                                 color = detail.get("color") or "—"
                                 supplier_article = detail.get("supplierArticle") or "—"
-                                tech_size = detail.get("techSize") or "—"
                                 total_price = order.get("totalPrice", "—")
 
                                 await self._bot.send_message(
@@ -77,9 +75,7 @@ class PollingManager:
                                     f"🆕 <b>Новый заказ!</b>\n\n"
                                     f"📦 ID заказа: <code>{order_id}</code>\n"
                                     f"🔖 Название: {subject}\n"
-                                    f"🏷 Бренд: {brand}\n"
                                     f"🎨 Цвет: {color}\n"
-                                    f"📐 Размер: {tech_size}\n"
                                     f"📄 Артикул: {supplier_article}\n"
                                     f"💰 Цена: {total_price} ₽\n\n"
                                     "Создайте поставку, чтобы отправить товар в Wildberries.",
