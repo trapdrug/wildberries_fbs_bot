@@ -38,7 +38,6 @@ sticker_gen = StickerGenerator(output_dir=STICKERS_DIR)
 
 # Unicode characters for messages
 EM_DASH = "\u2014"  # —
-BACK_ARROW = "\U0001F519"  # 🔄
 
 
 # Временные данные пользователя
@@ -119,9 +118,9 @@ async def format_client_info(client, order_id):
         if items:
             info = items[0]
             parts = []
-            if info.get("name"): parts.append(f"\U0001F464 {info['name']}")
-            if info.get("phone"): parts.append(f"\U0001F4F1 {info['phone']}")
-            if info.get("address"): parts.append(f"\U0001F4CD {info['address']}")
+            if info.get("name"): parts.append(f"👤 {info['name']}")
+            if info.get("phone"): parts.append(f"📱 {info['phone']}")
+            if info.get("address"): parts.append(f"📍 {info['address']}")
             if parts: return "\n".join(parts)
     except Exception as e:
         logger.warning(f"Ошибка клиента: {e}")
@@ -133,10 +132,10 @@ async def _check_orders_logic(message):
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
     if not api_key:
-        await message.answer("\U0001F6AB Сначала установите API-ключ через /start или /set_key", parse_mode="HTML")
+        await message.answer("🚫 Сначала установите API-ключ через /start или /set_key", parse_mode="HTML")
         return
 
-    await message.answer("\U0001F50D Проверяю заказы...")
+    await message.answer("🔍 Проверяю заказы...")
     client = WBApiClient(api_key)
     try:
         orders = await client.get_new_orders()
@@ -155,7 +154,7 @@ async def _check_orders_logic(message):
                 nm = order.get("nmId")
                 d = order_details.get(nm, {})
                 price = get_price(order)
-                prefix = "\U0001F395 " if is_new else "\U0001F4E6 "
+                prefix = "🌵 " if is_new else "📦 "
                 label = "Новый заказ!" if is_new else "Заказ"
                 await message.answer(
                     f"{prefix}<b>{label}</b>\n\n"
@@ -176,18 +175,18 @@ async def _check_orders_logic(message):
 
             if new_cnt == 0 and shown_cnt > 0:
                 await message.answer(
-                    f"\U0001F3C1 Новых заказов нет.\n\U0001F4E6 Всего заказов: {shown_cnt}",
+                    f"🌵 Новых заказов нет.\n📦 Всего заказов: {shown_cnt}",
                     reply_markup=get_main_reply_keyboard()
                 )
             elif new_cnt > 0:
                 await message.answer(
-                    f"\U0001F3C1 Проверка завершена.\n\U0001F395 Новых: {new_cnt}\n\U0001F4E6 Всего: {shown_cnt}",
+                    f"🌵 Проверка завершена.\n🌵 Новых: {new_cnt}\n📦 Всего: {shown_cnt}",
                     reply_markup=get_main_reply_keyboard()
                 )
         else:
-            await message.answer("\U0001F3C1 Заказов нет.", reply_markup=get_main_reply_keyboard())
+            await message.answer("🌵 Заказов нет.", reply_markup=get_main_reply_keyboard())
     except Exception as e:
-        await message.answer(f"\U0001F6AB Ошибка: {e}")
+        await message.answer(f"🚫 Ошибка: {e}")
         logger.error(f"Ошибка: {e}")
     finally:
         await client.close()
@@ -200,7 +199,7 @@ async def cb_create_supply(callback: CallbackQuery):
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
     if not api_key:
-        await callback.message.answer("\U0001F6AB API-ключ не найден.")
+        await callback.message.answer("🚫 API-ключ не найден.")
         return
 
     client = WBApiClient(api_key)
@@ -213,7 +212,7 @@ async def cb_create_supply(callback: CallbackQuery):
                 if not (o["id"] in ud.added_order_ids or o["id"] in ud.notified_order_ids):
                     items.append(o)
         if not items:
-            await callback.message.answer("\U0001F6AB Нет новых заказов.")
+            await callback.message.answer("🚫 Нет новых заказов.")
             return
 
         order_details = await get_order_details(client, items)
@@ -225,16 +224,16 @@ async def cb_create_supply(callback: CallbackQuery):
             "order_details": order_details,
         }
 
-        text = "\U0001F4CB <b>Выберите товары:</b>\n\n"
+        text = "📋 <b>Выберите товары:</b>\n\n"
         for item in items:
             d = order_details.get(item.get("nmId"), {})
             price = get_price(item)
-            text += f"\U0001F19A {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} \U20BD\n"
+            text += f"🆚 {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
 
         await callback.message.answer(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(items, order_details, set()))
     except Exception as e:
-        await callback.message.answer(f"\U0001F6AB Ошибка: {e}")
+        await callback.message.answer(f"🚫 Ошибка: {e}")
     finally:
         await client.close()
 
@@ -251,12 +250,12 @@ async def cb_toggle_item(callback: CallbackQuery):
     if oid in s["selected_orders"]: s["selected_orders"].discard(oid)
     else: s["selected_orders"].add(oid)
 
-    text = "\U0001F4CB <b>Выберите товары:</b>\n\n"
+    text = "📋 <b>Выберите товары:</b>\n\n"
     for item in s["items"]:
         d = s["order_details"].get(item.get("nmId"), {})
-        cb = "\U0001F3C1 " if item["id"] in s["selected_orders"] else "\U0001F19A "
+        cb = "🌵 " if item["id"] in s["selected_orders"] else "🆔 "
         price = get_price(item)
-        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} \U20BD\n"
+        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
     try:
         await callback.message.edit_text(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(s["items"], s["order_details"], s["selected_orders"]))
@@ -270,21 +269,21 @@ async def cb_next_to_trbx(callback: CallbackQuery):
     if user_id not in user_sessions: return
     s = user_sessions[user_id]
     if not s["selected_orders"]:
-        await callback.message.answer("\U0001F6AB Выберите хотя бы один товар.")
+        await callback.message.answer("🚫 Выберите хотя бы один товар.")
         return
 
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
     if not api_key: return
 
-    await callback.message.answer("\U0001F552 Создаю поставку...")
+    await callback.message.answer("⏱ Создаю поставку...")
 
     client = WBApiClient(api_key)
     try:
         supply_data = await client.create_supply()
         supply_id = supply_data.get("id")
         if not supply_id:
-            await callback.message.answer("\U0001F6AB Ошибка: не получен ID поставки.")
+            await callback.message.answer("🚫 Ошибка: не получен ID поставки.")
             return
 
         selected_ids = list(s["selected_orders"])
@@ -294,14 +293,14 @@ async def cb_next_to_trbx(callback: CallbackQuery):
         barcode_bytes = await client.get_supply_barcode(supply_id)
         client_info = await format_client_info(client, selected_ids[0]) if selected_ids else ""
 
-        supply_text = f"\U0001F3C1 <b>Поставка создана!</b>\n\n\U0001F4E6 ID: <code>{supply_id}</code>\n\U0001F4E6 Товаров: {len(selected_ids)}\n\n"
+        supply_text = f"🌵 <b>Поставка создана!</b>\n\n📦 ID: <code>{supply_id}</code>\n📦 Товаров: {len(selected_ids)}\n\n"
         for item in s["items"]:
             if item["id"] in s["selected_orders"]:
                 d = s["order_details"].get(item.get("nmId"), {})
                 price = get_price(item)
                 # Convert kopecks to rubles (1 ruble = 100 kopecks)
                 price_rubles = price / 100 if price >= 100 else price
-                supply_text += f"\U0001F4E6 {d.get('subject', EM_DASH)} — {price_rubles} \U20BD\n"
+                supply_text += f"📦 {d.get('subject', EM_DASH)} — {price_rubles} ₽\n"
 
         if client_info:
             supply_text += f"\n<b>Информация о клиенте:</b>\n{client_info}\n"
@@ -314,16 +313,16 @@ async def cb_next_to_trbx(callback: CallbackQuery):
             qr_path = os.path.join(STICKERS_DIR, f"qr_{supply_id}.png")
             with open(qr_path, "wb") as f:
                 f.write(barcode_bytes)
-            await callback.message.answer_document(FSInputFile(qr_path), caption=f"\U0001F4F1 QR-код поставки {supply_id}")
+            await callback.message.answer_document(FSInputFile(qr_path), caption=f"📱 QR-код поставки {supply_id}")
 
         trbx_list = s.get("trbx_list", [])
         await callback.message.answer(
-            f"\U0001F4E6 <b>Грузоместа</b>\nСоздано: {len(trbx_list)}\n\nДобавьте грузоместа и нажмите Завершить.",
+            f"📦 <b>Грузоместа</b>\nСоздано: {len(trbx_list)}\n\nДобавьте грузоместа и нажмите Завершить.",
             parse_mode="HTML",
             reply_markup=get_trbx_keyboard(supply_id, trbx_list)
         )
     except Exception as e:
-        await callback.message.answer(f"\U0001F6AB Ошибка: {e}")
+        await callback.message.answer(f"🚫 Ошибка: {e}")
     finally:
         await client.close()
 
@@ -345,12 +344,12 @@ async def cb_add_trbx(callback: CallbackQuery):
         if trbx_id:
             s.setdefault("trbx_list", []).append({"id": trbx_id, "number": len(s["trbx_list"]) + 1})
         await callback.message.edit_text(
-            f"\U0001F4E6 <b>Грузоместа</b>\nСоздано: {len(s['trbx_list'])}\n",
+            f"📦 <b>Грузоместа</b>\nСоздано: {len(s['trbx_list'])}\n",
             parse_mode="HTML",
             reply_markup=get_trbx_keyboard(s["supply_id"], s["trbx_list"])
         )
     except Exception as e:
-        await callback.message.answer(f"\U0001F6AB Ошибка: {e}")
+        await callback.message.answer(f"🚫 Ошибка: {e}")
     finally:
         await client.close()
 
@@ -375,12 +374,12 @@ async def cb_del_trbx(callback: CallbackQuery):
         await client.delete_trbx(s["supply_id"], trbx_id)
         s["trbx_list"] = [t for t in s.get("trbx_list", []) if t.get("id") != trbx_id]
         await callback.message.edit_text(
-            f"\U0001F4E6 <b>Грузоместа</b>\nСоздано: {len(s['trbx_list'])}\n",
+            f"📦 <b>Грузоместа</b>\nСоздано: {len(s['trbx_list'])}\n",
             parse_mode="HTML",
             reply_markup=get_trbx_keyboard(s["supply_id"], s["trbx_list"])
         )
     except Exception as e:
-        await callback.message.answer(f"\U0001F6AB Ошибка: {e}")
+        await callback.message.answer(f"🚫 Ошибка: {e}")
     finally:
         await client.close()
 
@@ -395,10 +394,10 @@ async def cb_finish_supply(callback: CallbackQuery):
     trbx_list = s.get("trbx_list", [])
     if not supply_id: return
     if not trbx_list:
-        await callback.message.answer("\U0001F6AB Создайте хотя бы одно грузоместо.")
+        await callback.message.answer("🚫 Создайте хотя бы одно грузоместо.")
         return
 
-    await callback.message.answer("\U0001F50D Получаю стикеры...")
+    await callback.message.answer("🔍 Получаю стикеры...")
 
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
@@ -412,7 +411,7 @@ async def cb_finish_supply(callback: CallbackQuery):
             sticker_gen.create_pdf_from_images(stickers, pdf_path)
             await callback.message.answer_document(
                 FSInputFile(pdf_path),
-                caption=f"\U0001F4E6 Стикеры поставки {supply_id}\nГрузомест: {len(trbx_ids)}\nТоваров: {len(s['selected_orders'])}"
+                caption=f"📦 Стикеры поставки {supply_id}\nГрузомест: {len(trbx_ids)}\nТоваров: {len(s['selected_orders'])}"
             )
 
         ud = storage.get_user(user_id)
@@ -423,11 +422,11 @@ async def cb_finish_supply(callback: CallbackQuery):
         del user_sessions[user_id]
 
         await callback.message.answer(
-            "\U0001F3C1 <b>Поставка завершена!</b>\n\nЯ продолжаю отслеживать новые заказы.",
+            "🌵 <b>Поставка завершена!</b>\n\nЯ продолжаю отслеживать новые заказы.",
             parse_mode="HTML", reply_markup=get_main_reply_keyboard()
         )
     except Exception as e:
-        await callback.message.answer(f"\U0001F6AB Ошибка: {e}")
+        await callback.message.answer(f"🚫 Ошибка: {e}")
     finally:
         await client.close()
 
@@ -435,7 +434,7 @@ async def cb_finish_supply(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("skip_order:"))
 async def cb_skip_order(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.answer("\U0001F51C Заказ пропущен.", reply_markup=get_main_reply_keyboard())
+    await callback.message.answer("⏩ Заказ пропущен.", reply_markup=get_main_reply_keyboard())
 
 
 @router.callback_query(F.data == "noop")
@@ -463,14 +462,14 @@ async def msg_create_supply(message: Message):
 async def msg_skip_order(message: Message):
     user_id = message.from_user.id
     if user_id in user_sessions: del user_sessions[user_id]
-    await message.answer("\U0001F51C Заказ пропущен.", reply_markup=get_main_reply_keyboard())
+    await message.answer("⏩ Заказ пропущен.", reply_markup=get_main_reply_keyboard())
 
 
 @router.message(F.text == "❌ Отменить")
 async def msg_cancel_supply(message: Message):
     user_id = message.from_user.id
     if user_id in user_sessions: del user_sessions[user_id]
-    await message.answer("\U0001F6AB Отменено.", reply_markup=get_main_reply_keyboard())
+    await message.answer("🚫 Отменено.", reply_markup=get_main_reply_keyboard())
 
 
 @router.message(F.text == "📊 Статус подключения")
@@ -479,13 +478,13 @@ async def msg_status(message: Message):
     storage = get_storage()
     api_key = storage.get_api_key(user_id)
     if not api_key:
-        await message.answer("\U0001F6AB API-ключ не установлен.", parse_mode="HTML")
+        await message.answer("🚫 API-ключ не установлен.", parse_mode="HTML")
         return
     client = WBApiClient(api_key)
     try:
         valid = await client.check_auth()
         await message.answer(
-            "\U0001F3C1 <b>Подключение активно.</b>" if valid else "\U0001F6AB <b>Не удалось подключиться.</b>",
+            "🌵 <b>Подключение активно.</b>" if valid else "🚫 <b>Не удалось подключиться.</b>",
             parse_mode="HTML", reply_markup=get_main_reply_keyboard()
         )
     finally:
