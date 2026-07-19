@@ -340,7 +340,16 @@ async def cb_next_to_trbx(callback: CallbackQuery):
         await client.add_orders_to_supply(supply_id, selected_ids)
         s["supply_id"] = supply_id
 
-        barcode_bytes = await client.get_supply_barcode(supply_id)
+        # WB makes the supply QR code available only after the supply has been
+        # transferred to delivery. A missing QR must not hide a successful
+        # supply creation or turn it into a user-facing error.
+        try:
+            barcode_bytes = await client.get_supply_barcode(supply_id)
+        except WildberriesAPIError as error:
+            logger.info(
+                "Supply %s created without QR code yet: %s", supply_id, error
+            )
+            barcode_bytes = None
         client_info = await format_client_info(client, selected_ids[0]) if selected_ids else ""
 
         supply_text = f"🌵 <b>Поставка создана!</b>\n\n📦 ID: <code>{supply_id}</code>\n📦 Товаров: {len(selected_ids)}\n\n"
