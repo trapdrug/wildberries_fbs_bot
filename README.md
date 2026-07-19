@@ -121,8 +121,8 @@ wildberries_fbs_bot/
 |-------|----------|----------|
 | GET | `/api/v3/orders/new` | Получение новых сборочных заданий |
 | POST | `/api/v3/supplies` | Создание поставки |
-| POST | `/api/v3/supplies/{id}/orders` | Добавление заказа в поставку |
-| GET | `/api/v3/supplies/{id}/orders` | Список заказов в поставке |
+| PATCH | `/api/marketplace/v3/supplies/{id}/orders` | Добавление заказов в поставку |
+| GET | `/api/marketplace/v3/supplies/{id}/order-ids` | Список ID заказов в поставке |
 | POST | `/api/v3/orders/stickers` | Получение стикеров заказов |
 | PATCH | `/api/v3/supplies/{id}/deliver` | Подтверждение поставки |
 

@@ -63,15 +63,35 @@ def format_price(price: int) -> str:
     return str(price)
 
 
+def get_order_name(order: dict) -> str:
+    """Return the product name from the FBS new-orders response."""
+    return order.get("article") or EM_DASH
+
+
+def get_order_article(order: dict) -> str:
+    """Use a separate seller article when the account provides one."""
+    return (
+        order.get("supplierArticle")
+        or order.get("vendorCode")
+        or (order.get("skus") or [None])[0]
+        or order.get("article")
+        or EM_DASH
+    )
+
+
 def format_order_message(order: dict, order_details: dict) -> str:
     """Форматировать сообщение с информацией о заказе."""
     oid = order.get("id")
-    article = order.get("article") or EM_DASH
+    name = get_order_name(order)
+    color = order.get("colorCode") or EM_DASH
+    article = get_order_article(order)
     price = get_price(order)
     
     return (
         f"🆕 <b>Новый заказ!</b>\n\n"
         f"📦 ID заказа: <code>{oid}</code>\n"
+        f"🏷️ Название: {name}\n"
+        f"🎨 Цвет: {color}\n"
         f"📄 Артикул: {article}\n"
         f"💰 Цена: {format_price(price)} ₽\n\n"
         f"Создайте поставку.\n\n"
@@ -295,17 +315,41 @@ async def cb_next_to_trbx(callback: CallbackQuery):
 
     client = WBApiClient(api_key)
     try:
-        supply_data = await client.create_supply()
+        # The selection screen can be open for a while.  Refresh the endpoint
+        # immediately before creating the supply so we never add stale orders.
+        fresh_orders = await client.get_new_orders()
+        fresh_order_ids = {order.get("id") for order in fresh_orders}
+        selected_ids = [
+            order_id for order_id in s["selected_orders"]
+            if order_id in fresh_order_ids
+        ]
+        if not selected_ids:
+            await callback.message.answer(
+                "Нет новых заказов для создания поставки. Обновите список заказов."
+            )
+            return
+
+        s["items"] = fresh_orders
+        supply_name = f"Поставка от {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        supply_data = await client.create_supply(supply_name)
         supply_id = supply_data.get("id")
         if not supply_id:
             await callback.message.answer("🚫 Ошибка: не получен ID поставки.")
             return
 
-        selected_ids = list(s["selected_orders"])
         await client.add_orders_to_supply(supply_id, selected_ids)
         s["supply_id"] = supply_id
 
-        barcode_bytes = await client.get_supply_barcode(supply_id)
+        # WB makes the supply QR code available only after the supply has been
+        # transferred to delivery. A missing QR must not hide a successful
+        # supply creation or turn it into a user-facing error.
+        try:
+            barcode_bytes = await client.get_supply_barcode(supply_id)
+        except WildberriesAPIError as error:
+            logger.info(
+                "Supply %s created without QR code yet: %s", supply_id, error
+            )
+            barcode_bytes = None
         client_info = await format_client_info(client, selected_ids[0]) if selected_ids else ""
 
         supply_text = f"🌵 <b>Поставка создана!</b>\n\n📦 ID: <code>{supply_id}</code>\n📦 Товаров: {len(selected_ids)}\n\n"
