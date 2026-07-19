@@ -24,16 +24,6 @@ class AuthError(WildberriesAPIError):
     pass
 
 
-class BadRequestError(WildberriesAPIError):
-    """Invalid Wildberries API request (400)."""
-    pass
-
-
-class PaymentRequiredError(WildberriesAPIError):
-    """Wildberries API access requires payment (402)."""
-    pass
-
-
 class ConflictError(WildberriesAPIError):
     """Конфликт статусов (409)."""
     pass
@@ -98,33 +88,17 @@ class WBApiClient:
             base = self.base_url
         url = urljoin(base, path.lstrip("/"))
 
-        # Never log Authorization headers. URL, status and body are enough for
-        # diagnostics and keep API tokens out of application logs.
-        logger.info("WB API request: %s %s", method, url)
+        logger.debug(f"{method} {url}")
 
         try:
             async with session.request(method, url, **kwargs) as resp:
+                if resp.status == 200 or resp.status == 201:
+                    return await resp.json() if resp.content_type == "application/json" else {}
+
                 body_text = await resp.text()
-                logger.info(
-                    "WB API response: %s %s -> %s; body=%s",
-                    method, url, resp.status, body_text[:1000],
-                )
 
-                # Adding orders to a supply returns 204 No Content on success.
-                if resp.status in (200, 201, 204):
-                    if not body_text:
-                        return {}
-                    try:
-                        return await resp.json(content_type=None)
-                    except (aiohttp.ContentTypeError, ValueError):
-                        return {}
-
-                if resp.status == 400:
-                    raise BadRequestError("Invalid Wildberries API request", status_code=400, body=body_text)
-                elif resp.status == 401:
+                if resp.status == 401:
                     raise AuthError("Неверный API-ключ", status_code=401, body=body_text)
-                elif resp.status == 402:
-                    raise PaymentRequiredError("Wildberries API access requires payment", status_code=402, body=body_text)
                 elif resp.status == 403:
                     raise ForbiddenError("Доступ запрещён", status_code=403, body=body_text)
                 elif resp.status == 404:
@@ -191,21 +165,10 @@ class WBApiClient:
 
     async def add_orders_to_supply(self, supply_id: str, order_ids: list[int]) -> dict:
         """Добавить заказы в поставку.
-        PATCH /api/marketplace/v3/supplies/{supplyId}/orders
+        POST /api/v3/supplies/{supplyId}/orders
         """
-        if not supply_id:
-            raise ValueError("supply_id is required")
-        if not 1 <= len(order_ids) <= 100:
-            raise ValueError("The supply must contain from 1 to 100 order IDs")
-
-        # WB expects numeric IDs and returns 204 No Content after success.
-        payload = {"orders": [int(order_id) for order_id in order_ids]}
-        return await self._request(
-            "PATCH",
-            f"supplies/{supply_id}/orders",
-            use_marketplace=True,
-            json=payload,
-        )
+        payload = {"orders": [str(oid) for oid in order_ids]}
+        return await self._request("POST", f"supplies/{supply_id}/orders", json=payload)
 
     async def create_trbx(self, supply_id: str) -> dict:
         return await self._request("POST", f"supplies/{supply_id}/trbx", json={})
@@ -253,20 +216,16 @@ class WBApiClient:
         payload = {"nmIDs": nm_ids}
         return await self._request("POST", "cards/list", use_content=True, json=payload)
 
-    async def create_supply(self, name: str) -> dict:
-        """Create a named supply and return the response containing ``id``."""
-        if not name:
-            raise ValueError("Supply name must not be empty")
-        return await self._request("POST", "supplies", json={"name": name})
+    async def create_supply(self) -> dict:
+        return await self._request("POST", "supplies", json={})
 
     async def add_order_to_supply(self, supply_id: str, order_id: int) -> dict:
-        return await self.add_orders_to_supply(supply_id, [order_id])
+        payload = {"orders": [str(order_id)]}
+        return await self._request("POST", f"supplies/{supply_id}/orders", json=payload)
 
     async def get_supply_orders(self, supply_id: str) -> list[dict]:
-        data = await self._request(
-            "GET", f"supplies/{supply_id}/order-ids", use_marketplace=True
-        )
-        return data.get("orderIds", [])
+        data = await self._request("GET", f"supplies/{supply_id}/orders")
+        return data.get("orders", [])
 
     async def get_orders_stickers(self, order_ids: list[int], sticker_type: str = "png") -> list[dict]:
         payload = {"orders": order_ids, "type": sticker_type}
