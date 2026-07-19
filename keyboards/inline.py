@@ -17,6 +17,17 @@ def get_create_supply_keyboard(order_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def get_check_orders_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура после проверки заказов: кнопка создания поставки."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="📦 Создать поставку",
+        callback_data="create_supply:all"
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def get_order_items_keyboard(
     items: list[dict],
     order_details: dict,

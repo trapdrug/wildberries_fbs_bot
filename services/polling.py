@@ -59,14 +59,12 @@ class PollingManager:
                 try:
                     orders = await client.get_new_orders()
                     if orders and self._bot:
-                        # Получаем детальную информацию о товарах (название, цвет, артикул)
+                        # Получаем названия товаров через content API (только subject)
                         nm_ids = [o.get("nmId") for o in orders if o.get("nmId")]
                         order_details = {}
                         if nm_ids:
                             try:
-                                # Используем get_cards_list для получения названий товаров
                                 cards_data = await client.get_cards_list(nm_ids)
-                                # Try to get cards from different possible structures
                                 cards_list = []
                                 if isinstance(cards_data, dict):
                                     cards_list = cards_data.get("cards", [])
@@ -77,11 +75,11 @@ class PollingManager:
                                 for card in cards_list:
                                     nm_id = card.get("nmID")
                                     if nm_id:
+                                        # Сохраняем только subject (название товара) из карточки
+                                        # Цвет (colorCode) и артикул (article) берём из самого заказа
                                         order_details[nm_id] = {
                                             "nmId": nm_id,
                                             "subject": card.get("title") or card.get("name") or EM_DASH,
-                                            "color": card.get("color") or EM_DASH,
-                                            "supplierArticle": card.get("article") or card.get("supplierArticle") or EM_DASH,
                                         }
                             except Exception as e:
                                 logger.warning(f"Не удалось получить карточки товаров: {e}")
@@ -98,10 +96,11 @@ class PollingManager:
 
                                 nm_id = order.get("nmId", "?")
                                 detail = order_details.get(nm_id, {})
-                                # Используем данные из карточки, если есть, иначе из заказа
+                                
+                                # Данные берём ПРЯМО из заказа (article, colorCode, skus)
                                 subject = detail.get("subject", EM_DASH)
-                                color = detail.get("color") or order.get("colorCode") or EM_DASH
-                                supplier_article = detail.get("supplierArticle") or order.get("article") or EM_DASH
+                                color = order.get("colorCode") or EM_DASH
+                                article = order.get("article") or EM_DASH
                                 total_price = get_price(order)
 
                                 await self._bot.send_message(
@@ -110,7 +109,7 @@ class PollingManager:
                                     f"📦 ID заказа: <code>{order_id}</code>\n"
                                     f"🔖 Название: {subject}\n"
                                     f"🎨 Цвет: {color}\n"
-                                    f"📄 Артикул: {supplier_article}\n"
+                                    f"📄 Артикул: {article}\n"
                                     f"💰 Цена: {format_price(total_price)} ₽\n\n"
                                     f"Создайте поставку.\n\n"
                                     f"🔙 <i>Главное меню</i>",

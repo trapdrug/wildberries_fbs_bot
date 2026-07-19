@@ -154,7 +154,7 @@ class WBApiClient:
         return data.get("orderIds", [])
 
     async def get_supply_barcode(self, supply_id: str) -> Optional[bytes]:
-        data = await self._request("GET", f"supplies/{supply_id}/barcode")
+        data = await self._request("GET", f"supplies/{supply_id}/barcode?type=png")
         file_b64 = data.get("file")
         if file_b64:
             return base64.b64decode(file_b64)
@@ -164,8 +164,11 @@ class WBApiClient:
         return await self._request("DELETE", f"supplies/{supply_id}")
 
     async def add_orders_to_supply(self, supply_id: str, order_ids: list[int]) -> dict:
-        payload = {"orderIds": order_ids}
-        return await self._request("PATCH", f"supplies/{supply_id}/orders", use_marketplace=True, json=payload)
+        """Добавить заказы в поставку.
+        POST /api/v3/supplies/{supplyId}/orders
+        """
+        payload = {"orders": [str(oid) for oid in order_ids]}
+        return await self._request("POST", f"supplies/{supply_id}/orders", json=payload)
 
     async def create_trbx(self, supply_id: str) -> dict:
         return await self._request("POST", f"supplies/{supply_id}/trbx", json={})
