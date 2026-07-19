@@ -38,6 +38,7 @@ sticker_gen = StickerGenerator(output_dir=STICKERS_DIR)
 
 # Unicode characters for messages
 EM_DASH = "\u2014"  # —
+BACK_ARROW = "\U0001F519"  # 🔄
 
 
 # Временные данные пользователя
@@ -142,8 +143,8 @@ async def _check_orders_logic(message):
                     f"\U0001F3A8 Цвет: {d.get('color', EM_DASH)}\n"
                     f"\U0001F4C4 Артикул: {d.get('supplierArticle', EM_DASH)}\n"
                     f"\U0001F4B0 Цена: {price} \U0001F4B0\n\n"
-                    "\U0001F19A Создайте поставку.\n\n"
-                    "\U0001F519 <i>Главное меню</i>",
+                    f"\U0001F19A Создайте поставку.\n\n"
+                    f"{BACK_ARROW} <i>Главное меню</i>",
                     parse_mode="HTML",
                     reply_markup=get_create_supply_keyboard(oid) if is_new else None
                 )
