@@ -98,15 +98,26 @@ class PollingManager:
                                 detail = order_details.get(nm_id, {})
                                 
                                 # Данные берём ПРЯМО из заказа (article, colorCode, skus)
-                                subject = detail.get("subject", EM_DASH)
+                                # ``article`` and ``colorCode`` are included in
+                                # /api/v3/orders/new; do not depend on a second
+                                # content-API call to render a notification.
+                                subject = order.get("article") or detail.get("subject", EM_DASH)
                                 color = order.get("colorCode") or EM_DASH
-                                article = order.get("article") or EM_DASH
+                                article = (
+                                    order.get("supplierArticle")
+                                    or order.get("vendorCode")
+                                    or (order.get("skus") or [None])[0]
+                                    or order.get("article")
+                                    or EM_DASH
+                                )
                                 total_price = get_price(order)
 
                                 await self._bot.send_message(
                                     user_id,
                                     f"🆕 <b>Новый заказ!</b>\n\n"
                                     f"📦 ID заказа: <code>{order_id}</code>\n"
+                                    f"🏷️ Название: {subject}\n"
+                                    f"🎨 Цвет: {color}\n"
                                     f"📄 Артикул: {article}\n"
                                     f"💰 Цена: {format_price(total_price)} ₽\n\n"
                                     f"Создайте поставку.\n\n"
