@@ -51,6 +51,7 @@ class WBApiClient:
         self.api_key = api_key
         self.base_url = urljoin(API_HOST, f"/api/{API_VERSION}/")
         self.marketplace_url = f"{API_HOST}/api/marketplace/{API_VERSION}/"
+        self.content_url = "https://content-api.wildberries.ru/content/v2/"
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -74,11 +75,17 @@ class WBApiClient:
         method: str,
         path: str,
         use_marketplace: bool = False,
+        use_content: bool = False,
         **kwargs
     ) -> dict:
         """Выполнить HTTP-запрос к API."""
         session = await self._get_session()
-        base = self.marketplace_url if use_marketplace else self.base_url
+        if use_content:
+            base = self.content_url
+        elif use_marketplace:
+            base = self.marketplace_url
+        else:
+            base = self.base_url
         url = urljoin(base, path.lstrip("/"))
 
         logger.debug(f"{method} {url}")
@@ -199,12 +206,12 @@ class WBApiClient:
     async def get_cards_list(self, nm_ids: list[int]) -> dict:
         """
         Получить карточки товаров по nmId.
-        POST /content/v2/get/cards/list
+        POST https://content-api.wildberries.ru/content/v2/get/cards/list
         """
         if not nm_ids:
             return {}
         payload = {"nmIDs": nm_ids}
-        return await self._request("POST", "content/v2/get/cards/list", json=payload)
+        return await self._request("POST", "get/cards/list", use_content=True, json=payload)
 
     async def create_supply(self) -> dict:
         return await self._request("POST", "supplies", json={})
