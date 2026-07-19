@@ -107,8 +107,6 @@ class PollingManager:
                                     user_id,
                                     f"🆕 <b>Новый заказ!</b>\n\n"
                                     f"📦 ID заказа: <code>{order_id}</code>\n"
-                                    f"🔖 Название: {subject}\n"
-                                    f"🎨 Цвет: {color}\n"
                                     f"📄 Артикул: {article}\n"
                                     f"💰 Цена: {format_price(total_price)} ₽\n\n"
                                     f"Создайте поставку.\n\n"
