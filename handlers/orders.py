@@ -36,6 +36,10 @@ logger = logging.getLogger(__name__)
 router = Router()
 sticker_gen = StickerGenerator(output_dir=STICKERS_DIR)
 
+# Unicode characters for messages
+EM_DASH = "\u2014"  # —
+BACK_ARROW = "\U0001F519"  # 🔄
+
 
 # Временные данные пользователя
 # {user_id: {"order_ids": list[int], "selected_orders": set[int], "items": list[dict],
@@ -61,9 +65,9 @@ async def get_order_details(client, items):
             # Базовые данные из заказа
             result[nm] = {
                 "nmId": nm,
-                "subject": "\u2014",  # Будет заполнено из content API (—)
-                "color": item.get("colorCode") or "\u2014",
-                "supplierArticle": item.get("article") or "\u2014",
+                "subject": EM_DASH,  # Будет заполнено из content API (—)
+                "color": item.get("colorCode") or EM_DASH,
+                "supplierArticle": item.get("article") or EM_DASH,
                 "price": get_price(item),
             }
     
@@ -77,7 +81,7 @@ async def get_order_details(client, items):
                 nm_id = card.get("nmID")
                 if nm_id and nm_id in result:
                     # Название товара берем из карточки
-                    result[nm_id]["subject"] = card.get("title") or card.get("name") or "\u2014"
+                    result[nm_id]["subject"] = card.get("title") or card.get("name") or EM_DASH
         except Exception as e:
             logger.warning(f"Ошибка получения карточек товаров: {e}")
     
@@ -135,12 +139,12 @@ async def _check_orders_logic(message):
                 await message.answer(
                     f"{prefix}<b>{label}</b>\n\n"
                     f"\U0001F4E6 ID заказа: <code>{oid}</code>\n"
-                    f"\U0001F021 Название: {d.get('subject','\u2014')}\n"
-                    f"\U0001F3A8 Цвет: {d.get('color','\u2014')}\n"
-                    f"\U0001F4C4 Артикул: {d.get('supplierArticle','\u2014')}\n"
+                    f"\U0001F021 Название: {d.get('subject', EM_DASH)}\n"
+                    f"\U0001F3A8 Цвет: {d.get('color', EM_DASH)}\n"
+                    f"\U0001F4C4 Артикул: {d.get('supplierArticle', EM_DASH)}\n"
                     f"\U0001F4B0 Цена: {price} \U0001F4B0\n\n"
-                    "\U0001F19A Создайте поставку.\n\n"
-                    "\U0001F519 <i>Главное меню</i>",
+                    f"\U0001F19A Создайте поставку.\n\n"
+                    f"{BACK_ARROW} <i>Главное меню</i>",
                     parse_mode="HTML",
                     reply_markup=get_create_supply_keyboard(oid) if is_new else None
                 )
@@ -204,7 +208,7 @@ async def cb_create_supply(callback: CallbackQuery):
         for item in items:
             d = order_details.get(item.get("nmId"), {})
             price = get_price(item)
-            text += f"\U0001F19A {d.get('subject','\u2014')} | {d.get('color','\u2014')} | Арт: {d.get('supplierArticle','\u2014')} | {price} \U0001F4B0\n"
+            text += f"\U0001F19A {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {price} \U0001F4B0\n"
 
         await callback.message.answer(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(items, order_details, set()))
@@ -231,7 +235,7 @@ async def cb_toggle_item(callback: CallbackQuery):
         d = s["order_details"].get(item.get("nmId"), {})
         cb = "\U0001F3C1 " if item["id"] in s["selected_orders"] else "\U0001F19A "
         price = get_price(item)
-        text += f"{cb} {d.get('subject','\u2014')} | {d.get('color','\u2014')} | Арт: {d.get('supplierArticle','\u2014')} | {price} \U0001F4B0\n"
+        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {price} \U0001F4B0\n"
     try:
         await callback.message.edit_text(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(s["items"], s["order_details"], s["selected_orders"]))
@@ -274,7 +278,7 @@ async def cb_next_to_trbx(callback: CallbackQuery):
             if item["id"] in s["selected_orders"]:
                 d = s["order_details"].get(item.get("nmId"), {})
                 price = get_price(item)
-                supply_text += f"\U0001F4E6 {d.get('subject','\u2014')} \u2014 {price} \U0001F4B0\n"
+                supply_text += f"\U0001F4E6 {d.get('subject', EM_DASH)} — {price} \U0001F4B0\n"
 
         if client_info:
             supply_text += f"\n<b>Информация о клиенте:</b>\n{client_info}\n"
