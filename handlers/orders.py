@@ -159,13 +159,13 @@ async def _check_orders_logic(message):
                 label = "Новый заказ!" if is_new else "Заказ"
                 await message.answer(
                     f"{prefix}<b>{label}</b>\n\n"
-                    f"\U0001F4E6 ID заказа: <code>{oid}</code>\n"
-                    f"\U0001F021 Название: {d.get('subject', EM_DASH)}\n"
-                    f"\U0001F3A8 Цвет: {d.get('color', EM_DASH)}\n"
-                    f"\U0001F4C4 Артикул: {d.get('supplierArticle', EM_DASH)}\n"
-                    f"\U0001F4B0 Цена: {format_price(price)} \U20BD\n\n"
-                    f"\U0001F19A Создайте поставку.\n\n"
-                    f"{BACK_ARROW} <i>Главное меню</i>",
+                    f"📦 ID заказа: <code>{oid}</code>\n"
+                    f"🆔 Название: {d.get('subject', EM_DASH)}\n"
+                    f"🎨 Цвет: {d.get('color', EM_DASH)}\n"
+                    f"📄 Артикул: {d.get('supplierArticle', EM_DASH)}\n"
+                    f"💰 Цена: {format_price(price)} ₽\n\n"
+                    f"🆚 Создайте поставку.\n\n"
+                    f"🔙 <i>Главное меню</i>",
                     parse_mode="HTML",
                     reply_markup=get_create_supply_keyboard(oid) if is_new else None
                 )
