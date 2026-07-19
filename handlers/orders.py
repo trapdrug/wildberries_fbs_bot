@@ -47,12 +47,35 @@ async def get_order_details(client, items):
     nm_ids = [i.get("nmId") for i in items if i.get("nmId")]
     if not nm_ids:
         return {}
+    result = {}
     try:
         details = await client.get_orders_status(nm_ids)
-        return {d.get("nmId"): d for d in details if d.get("nmId")}
+        for d in details:
+            nm = d.get("nmId")
+            if nm:
+                result[nm] = d
     except Exception as e:
-        logger.warning(f"Ошибка получения деталей: {e}")
-        return {}
+        logger.warning(f"Ошибка получения деталей заказов: {e}")
+
+    # Если orders/status не дал полных данных, запрашиваем через content API
+    missing_nm_ids = [nm for nm in nm_ids if nm not in result or not result[nm].get("subject")]
+    if missing_nm_ids:
+        try:
+            cards = await client.get_cards_list(missing_nm_ids)
+            cards_list = cards.get("cards", [])
+            for card in cards_list:
+                nm_id = card.get("nmID")
+                if nm_id:
+                    result[nm_id] = {
+                        "nmId": nm_id,
+                        "subject": card.get("title") or card.get("name"),
+                        "color": card.get("color") or card.get("colors", [{}])[0].get("name") if card.get("colors") else None,
+                        "supplierArticle": card.get("vendorCode") or card.get("article"),
+                    }
+        except Exception as e:
+            logger.warning(f"Ошибка получения карточек товаров: {e}")
+
+    return result
 
 
 async def format_client_info(client, order_id):
@@ -82,23 +105,28 @@ async def _check_orders_logic(message):
         await message.answer("❌ Сначала установите API-ключ через /start или /set_key", parse_mode="HTML")
         return
 
-    await message.answer("🔍 Проверяю новые заказы...")
+    await message.answer("🔍 Проверяю заказы...")
     client = WBApiClient(api_key)
     try:
         orders = await client.get_new_orders()
         if orders:
             order_details = await get_order_details(client, orders)
             new_cnt = 0
+            shown_cnt = 0
             for order in orders:
                 oid = order.get("id")
                 if not oid: continue
                 ud = storage.get_user(user_id)
-                if oid in ud.added_order_ids or oid in ud.notified_order_ids: continue
-                new_cnt += 1
+                is_new = oid not in ud.added_order_ids and oid not in ud.notified_order_ids
+                if is_new:
+                    new_cnt += 1
+                shown_cnt += 1
                 nm = order.get("nmId")
                 d = order_details.get(nm, {})
+                prefix = "🆕 " if is_new else "📦 "
+                label = "Новый заказ!" if is_new else "Заказ"
                 await message.answer(
-                    f"🆕 <b>Новый заказ!</b>\n\n"
+                    f"{prefix}<b>{label}</b>\n\n"
                     f"📦 ID заказа: <code>{oid}</code>\n"
                     f"🔖 Название: {d.get('subject','—')}\n"
                     f"🎨 Цвет: {d.get('color','—')}\n"
@@ -107,15 +135,25 @@ async def _check_orders_logic(message):
                     "Создайте поставку.\n\n"
                     "🔙 <i>Главное меню</i>",
                     parse_mode="HTML",
-                    reply_markup=get_create_supply_keyboard(oid)
+                    reply_markup=get_create_supply_keyboard(oid) if is_new else None
                 )
-                ud.notified_order_ids.append(oid)
-                storage.save_user(user_id, ud)
-                user_sessions.setdefault(user_id, {}).setdefault("order_ids", []).append(oid)
-            if new_cnt == 0:
-                await message.answer("✅ Новых заказов нет.", reply_markup=get_main_reply_keyboard())
+                if is_new:
+                    ud.notified_order_ids.append(oid)
+                    storage.save_user(user_id, ud)
+                    user_sessions.setdefault(user_id, {}).setdefault("order_ids", []).append(oid)
+
+            if new_cnt == 0 and shown_cnt > 0:
+                await message.answer(
+                    f"✅ Новых заказов нет.\n📦 Всего заказов: {shown_cnt}",
+                    reply_markup=get_main_reply_keyboard()
+                )
+            elif new_cnt > 0:
+                await message.answer(
+                    f"✅ Проверка завершена.\n🆕 Новых: {new_cnt}\n📦 Всего: {shown_cnt}",
+                    reply_markup=get_main_reply_keyboard()
+                )
         else:
-            await message.answer("✅ Новых заказов нет.", reply_markup=get_main_reply_keyboard())
+            await message.answer("✅ Заказов нет.", reply_markup=get_main_reply_keyboard())
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
         logger.error(f"Ошибка: {e}")
