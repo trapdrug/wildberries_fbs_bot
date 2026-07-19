@@ -206,12 +206,12 @@ class WBApiClient:
     async def get_cards_list(self, nm_ids: list[int]) -> dict:
         """
         Получить карточки товаров по nmId.
-        POST https://content-api.wildberries.ru/content/v2/get/cards/list
+        POST https://content-api.wildberries.ru/content/v2/cards/list
         """
         if not nm_ids:
             return {}
         payload = {"nmIDs": nm_ids}
-        return await self._request("POST", "get/cards/list", use_content=True, json=payload)
+        return await self._request("POST", "cards/list", use_content=True, json=payload)
 
     async def create_supply(self) -> dict:
         return await self._request("POST", "supplies", json={})

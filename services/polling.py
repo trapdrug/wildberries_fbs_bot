@@ -14,7 +14,27 @@ if _PROJECT_ROOT not in sys.path:
 from wb_api import WBApiClient, AuthError, RateLimitError
 from storage.user_storage import get_storage
 from keyboards.inline import get_create_supply_keyboard
+
 logger = logging.getLogger(__name__)
+
+# Unicode characters for messages
+EM_DASH = "\u2014"  # —
+BACK_ARROW = "\U0001F519"  # 🔄
+
+
+def get_price(item: dict) -> int:
+    """Получить цену из заказа (поддерживает разные форматы API)."""
+    return item.get("finalPrice") or item.get("price") or item.get("totalPrice") or 0
+
+
+def format_price(price: int) -> str:
+    """Форматировать цену: если в копейках (целое число >= 100) — перевести в рубли."""
+    if price is None:
+        return "0"
+    # Цена в копейках (обычно 51200 = 512.00 руб)
+    if price >= 100:
+        return f"{price / 100:.2f}".rstrip('0').rstrip('.')
+    return str(price)
 
 
 class PollingManager:
@@ -44,13 +64,27 @@ class PollingManager:
                         order_details = {}
                         if nm_ids:
                             try:
-                                details = await client.get_orders_status(nm_ids)
-                                for d in details:
-                                    nm = d.get("nmId")
-                                    if nm:
-                                        order_details[nm] = d
+                                # Используем get_cards_list для получения названий товаров
+                                cards_data = await client.get_cards_list(nm_ids)
+                                # Try to get cards from different possible structures
+                                cards_list = []
+                                if isinstance(cards_data, dict):
+                                    cards_list = cards_data.get("cards", [])
+                                    if not cards_list and "data" in cards_data:
+                                        cards_list = cards_data["data"].get("cards", [])
+                                elif isinstance(cards_data, list):
+                                    cards_list = cards_data
+                                for card in cards_list:
+                                    nm_id = card.get("nmID")
+                                    if nm_id:
+                                        order_details[nm_id] = {
+                                            "nmId": nm_id,
+                                            "subject": card.get("title") or card.get("name") or EM_DASH,
+                                            "color": card.get("color") or EM_DASH,
+                                            "supplierArticle": card.get("article") or card.get("supplierArticle") or EM_DASH,
+                                        }
                             except Exception as e:
-                                logger.warning(f"Не удалось получить детали заказов: {e}")
+                                logger.warning(f"Не удалось получить карточки товаров: {e}")
 
                         for order in orders:
                             order_id = order.get("id")
@@ -64,10 +98,11 @@ class PollingManager:
 
                                 nm_id = order.get("nmId", "?")
                                 detail = order_details.get(nm_id, {})
-                                subject = detail.get("subject") or "—"
-                                color = detail.get("color") or "—"
-                                supplier_article = detail.get("supplierArticle") or "—"
-                                total_price = order.get("totalPrice", "—")
+                                # Используем данные из карточки, если есть, иначе из заказа
+                                subject = detail.get("subject", EM_DASH)
+                                color = detail.get("color") or order.get("colorCode") or EM_DASH
+                                supplier_article = detail.get("supplierArticle") or order.get("article") or EM_DASH
+                                total_price = get_price(order)
 
                                 await self._bot.send_message(
                                     user_id,
@@ -76,9 +111,9 @@ class PollingManager:
                                     f"🔖 Название: {subject}\n"
                                     f"🎨 Цвет: {color}\n"
                                     f"📄 Артикул: {supplier_article}\n"
-                                    f"💰 Цена: {total_price} ₽\n\n"
-                                    "Создайте поставку.\n\n"
-                                    "🔙 <i>Главное меню</i>",
+                                    f"💰 Цена: {format_price(total_price)} ₽\n\n"
+                                    f"Создайте поставку.\n\n"
+                                    f"🔙 <i>Главное меню</i>",
                                     parse_mode="HTML",
                                     reply_markup=get_create_supply_keyboard(order_id)
                                 )

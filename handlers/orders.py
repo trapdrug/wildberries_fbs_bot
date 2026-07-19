@@ -49,7 +49,18 @@ user_sessions: dict[int, dict] = {}
 
 def get_price(item: dict) -> int:
     """Получить цену из заказа (поддерживает разные форматы API)."""
+    # Приоритет: finalPrice > price > totalPrice > 0
     return item.get("finalPrice") or item.get("price") or item.get("totalPrice") or 0
+
+
+def format_price(price: int) -> str:
+    """Форматировать цену: если в копейках (целое число >= 100) — перевести в рубли."""
+    if price is None:
+        return "0"
+    # Цена в копейках (обычно 51200 = 512.00 руб)
+    if price >= 100:
+        return f"{price / 100:.2f}".rstrip('0').rstrip('.')
+    return str(price)
 
 
 async def get_order_details(client, items):
@@ -65,18 +76,28 @@ async def get_order_details(client, items):
             # Базовые данные из заказа
             result[nm] = {
                 "nmId": nm,
-                "subject": EM_DASH,  # Будет заполнено из content API (—)
+                "subject": EM_DASH,  # Будет заполнено из content API
                 "color": item.get("colorCode") or EM_DASH,
                 "supplierArticle": item.get("article") or EM_DASH,
                 "price": get_price(item),
             }
-    
+
     # Получаем названия товаров через content API
     nm_ids = list(result.keys())
     if nm_ids:
         try:
-            cards = await client.get_cards_list(nm_ids)
-            cards_list = cards.get("cards", [])
+            cards_data = await client.get_cards_list(nm_ids)
+            # Try to get cards from different possible structures
+            cards_list = []
+            if isinstance(cards_data, dict):
+                # Option 1: top-level "cards"
+                cards_list = cards_data.get("cards", [])
+                # Option 2: nested under "data"
+                if not cards_list and "data" in cards_data:
+                    cards_list = cards_data["data"].get("cards", [])
+            elif isinstance(cards_data, list):
+                # Option 3: maybe the root is a list?
+                cards_list = cards_data
             for card in cards_list:
                 nm_id = card.get("nmID")
                 if nm_id and nm_id in result:
@@ -84,7 +105,7 @@ async def get_order_details(client, items):
                     result[nm_id]["subject"] = card.get("title") or card.get("name") or EM_DASH
         except Exception as e:
             logger.warning(f"Ошибка получения карточек товаров: {e}")
-    
+
     return result
 
 
@@ -142,7 +163,7 @@ async def _check_orders_logic(message):
                     f"\U0001F021 Название: {d.get('subject', EM_DASH)}\n"
                     f"\U0001F3A8 Цвет: {d.get('color', EM_DASH)}\n"
                     f"\U0001F4C4 Артикул: {d.get('supplierArticle', EM_DASH)}\n"
-                    f"\U0001F4B0 Цена: {price} \U0001F4B0\n\n"
+                    f"\U0001F4B0 Цена: {format_price(price)} \U20BD\n\n"
                     f"\U0001F19A Создайте поставку.\n\n"
                     f"{BACK_ARROW} <i>Главное меню</i>",
                     parse_mode="HTML",
@@ -208,7 +229,7 @@ async def cb_create_supply(callback: CallbackQuery):
         for item in items:
             d = order_details.get(item.get("nmId"), {})
             price = get_price(item)
-            text += f"\U0001F19A {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {price} \U0001F4B0\n"
+            text += f"\U0001F19A {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} \U20BD\n"
 
         await callback.message.answer(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(items, order_details, set()))
@@ -235,7 +256,7 @@ async def cb_toggle_item(callback: CallbackQuery):
         d = s["order_details"].get(item.get("nmId"), {})
         cb = "\U0001F3C1 " if item["id"] in s["selected_orders"] else "\U0001F19A "
         price = get_price(item)
-        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {price} \U0001F4B0\n"
+        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} \U20BD\n"
     try:
         await callback.message.edit_text(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(s["items"], s["order_details"], s["selected_orders"]))
@@ -278,7 +299,9 @@ async def cb_next_to_trbx(callback: CallbackQuery):
             if item["id"] in s["selected_orders"]:
                 d = s["order_details"].get(item.get("nmId"), {})
                 price = get_price(item)
-                supply_text += f"\U0001F4E6 {d.get('subject', EM_DASH)} — {price} \U0001F4B0\n"
+                # Convert kopecks to rubles (1 ruble = 100 kopecks)
+                price_rubles = price / 100 if price >= 100 else price
+                supply_text += f"\U0001F4E6 {d.get('subject', EM_DASH)} — {price_rubles} \U20BD\n"
 
         if client_info:
             supply_text += f"\n<b>Информация о клиенте:</b>\n{client_info}\n"
