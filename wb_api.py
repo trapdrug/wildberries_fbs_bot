@@ -196,6 +196,16 @@ class WBApiClient:
         data = await self._request("POST", "orders/status", json=payload)
         return data.get("orders", [])
 
+    async def get_cards_list(self, nm_ids: list[int]) -> dict:
+        """
+        Получить карточки товаров по nmId.
+        POST /content/v2/get/cards/list
+        """
+        if not nm_ids:
+            return {}
+        payload = {"nmIDs": nm_ids}
+        return await self._request("POST", "content/v2/get/cards/list", json=payload)
+
     async def create_supply(self) -> dict:
         return await self._request("POST", "supplies", json={})
 
