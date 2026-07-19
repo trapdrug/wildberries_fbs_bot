@@ -64,30 +64,14 @@ def format_price(price: int) -> str:
 
 
 def format_order_message(order: dict, order_details: dict) -> str:
-    """Форматировать сообщение с информацией о заказе.
-    
-    Берёт данные напрямую из order (article, colorCode, skus, price)
-    и дополняет названием товара из order_details (если удалось получить через content API).
-    """
+    """Форматировать сообщение с информацией о заказе."""
     oid = order.get("id")
-    nm_id = order.get("nmId")
-    
-    # Данные из самого заказа (всегда доступны)
     article = order.get("article") or EM_DASH
-    color = order.get("colorCode") or EM_DASH
-    skus = order.get("skus", [])
-    sku = skus[0] if skus else EM_DASH
     price = get_price(order)
-    
-    # Название товара из карточки (может быть не получено)
-    detail = order_details.get(nm_id, {})
-    subject = detail.get("subject", EM_DASH)
     
     return (
         f"🆕 <b>Новый заказ!</b>\n\n"
         f"📦 ID заказа: <code>{oid}</code>\n"
-        f"🔖 Название: {subject}\n"
-        f"🎨 Цвет: {color}\n"
         f"📄 Артикул: {article}\n"
         f"💰 Цена: {format_price(price)} ₽\n\n"
         f"Создайте поставку.\n\n"
@@ -257,9 +241,9 @@ async def cb_create_supply(callback: CallbackQuery):
 
         text = "📋 <b>Выберите товары для поставки:</b>\n\n"
         for item in orders:
-            d = order_details.get(item.get("nmId"), {})
             price = get_price(item)
-            text += f"🆔 {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
+            article = item.get("article") or EM_DASH
+            text += f"🆔 Артикул: {article} | {format_price(price)} ₽\n"
 
         await callback.message.answer(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(orders, order_details, set()))
@@ -283,10 +267,10 @@ async def cb_toggle_item(callback: CallbackQuery):
 
     text = "📋 <b>Выберите товары:</b>\n\n"
     for item in s["items"]:
-        d = s["order_details"].get(item.get("nmId"), {})
         cb = "🌵 " if item["id"] in s["selected_orders"] else "🆔 "
         price = get_price(item)
-        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
+        article = item.get("article") or EM_DASH
+        text += f"{cb} Артикул: {article} | {format_price(price)} ₽\n"
     try:
         await callback.message.edit_text(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(s["items"], s["order_details"], s["selected_orders"]))
@@ -327,11 +311,11 @@ async def cb_next_to_trbx(callback: CallbackQuery):
         supply_text = f"🌵 <b>Поставка создана!</b>\n\n📦 ID: <code>{supply_id}</code>\n📦 Товаров: {len(selected_ids)}\n\n"
         for item in s["items"]:
             if item["id"] in s["selected_orders"]:
-                d = s["order_details"].get(item.get("nmId"), {})
                 price = get_price(item)
+                article = item.get("article") or EM_DASH
                 # Convert kopecks to rubles (1 ruble = 100 kopecks)
                 price_rubles = price / 100 if price >= 100 else price
-                supply_text += f"📦 {d.get('subject', EM_DASH)} — {price_rubles} ₽\n"
+                supply_text += f"📦 {article} — {price_rubles} ₽\n"
 
         if client_info:
             supply_text += f"\n<b>Информация о клиенте:</b>\n{client_info}\n"
@@ -518,9 +502,9 @@ async def msg_create_supply(message: Message):
 
         text = "📋 <b>Выберите товары для поставки:</b>\n\n"
         for item in orders:
-            d = order_details.get(item.get("nmId"), {})
             price = get_price(item)
-            text += f"🆔 {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
+            article = item.get("article") or EM_DASH
+            text += f"🆔 Артикул: {article} | {format_price(price)} ₽\n"
 
         await message.answer(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(orders, order_details, set()))
