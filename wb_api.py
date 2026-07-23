@@ -165,13 +165,20 @@ class WBApiClient:
 
     async def add_orders_to_supply(self, supply_id: str, order_ids: list[int]) -> dict:
         """Добавить заказы в поставку.
-        POST /api/v3/supplies/{supplyId}/orders
+        PATCH /api/marketplace/v3/supplies/{supplyId}/orders
         """
-        payload = {"orders": [str(oid) for oid in order_ids]}
-        return await self._request("POST", f"supplies/{supply_id}/orders", json=payload)
+        payload = {"orders": order_ids}
+        return await self._request("PATCH", f"supplies/{supply_id}/orders", use_marketplace=True, json=payload)
 
-    async def create_trbx(self, supply_id: str) -> dict:
-        return await self._request("POST", f"supplies/{supply_id}/trbx", json={})
+    async def create_trbx(self, supply_id: str, order_ids: list[int] = None) -> dict:
+        """Создать грузоместо в поставке.
+        POST /api/v3/supplies/{supplyId}/trbx
+        Тело запроса: {"orderIds": [...]} для указания заказов в грузоместе.
+        """
+        payload = {}
+        if order_ids:
+            payload["orderIds"] = order_ids
+        return await self._request("POST", f"supplies/{supply_id}/trbx", json=payload)
 
     async def delete_trbx(self, supply_id: str, trbx_id: str) -> dict:
         payload = {"trbxIds": [trbx_id]}
@@ -216,12 +223,19 @@ class WBApiClient:
         payload = {"nmIDs": nm_ids}
         return await self._request("POST", "cards/list", use_content=True, json=payload)
 
-    async def create_supply(self) -> dict:
-        return await self._request("POST", "supplies", json={})
+    async def create_supply(self, name: str = None) -> dict:
+        """Создать поставку.
+        POST /api/v3/supplies
+        Опционально: {"name": "Название поставки"}
+        """
+        payload = {}
+        if name:
+            payload["name"] = name
+        return await self._request("POST", "supplies", json=payload)
 
     async def add_order_to_supply(self, supply_id: str, order_id: int) -> dict:
-        payload = {"orders": [str(order_id)]}
-        return await self._request("POST", f"supplies/{supply_id}/orders", json=payload)
+        payload = {"orders": [order_id]}
+        return await self._request("PATCH", f"supplies/{supply_id}/orders", use_marketplace=True, json=payload)
 
     async def get_supply_orders(self, supply_id: str) -> list[dict]:
         data = await self._request("GET", f"supplies/{supply_id}/orders")
