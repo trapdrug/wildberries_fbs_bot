@@ -24,6 +24,7 @@ from keyboards.inline import (
     get_create_supply_keyboard,
     get_order_items_keyboard,
     get_trbx_keyboard,
+    get_check_orders_keyboard,
 )
 from keyboards.reply import (
     get_main_reply_keyboard,
@@ -60,6 +61,22 @@ def format_price(price: int) -> str:
     if price >= 100:
         return f"{price / 100:.2f}".rstrip('0').rstrip('.')
     return str(price)
+
+
+def format_order_message(order: dict, order_details: dict) -> str:
+    """Форматировать сообщение с информацией о заказе."""
+    oid = order.get("id")
+    article = order.get("article") or EM_DASH
+    price = get_price(order)
+    
+    return (
+        f"🆕 <b>Новый заказ!</b>\n\n"
+        f"📦 ID заказа: <code>{oid}</code>\n"
+        f"📄 Артикул: {article}\n"
+        f"💰 Цена: {format_price(price)} ₽\n\n"
+        f"Создайте поставку.\n\n"
+        f"🔙 <i>Главное меню</i>"
+    )
 
 
 async def get_order_details(client, items):
@@ -151,23 +168,23 @@ async def _check_orders_logic(message):
                 if is_new:
                     new_cnt += 1
                 shown_cnt += 1
-                nm = order.get("nmId")
-                d = order_details.get(nm, {})
-                price = get_price(order)
-                prefix = "🌵 " if is_new else "📦 "
-                label = "Новый заказ!" if is_new else "Заказ"
-                await message.answer(
-                    f"{prefix}<b>{label}</b>\n\n"
-                    f"📦 ID заказа: <code>{oid}</code>\n"
-                    f"🆔 Название: {d.get('subject', EM_DASH)}\n"
-                    f"🎨 Цвет: {d.get('color', EM_DASH)}\n"
-                    f"📄 Артикул: {d.get('supplierArticle', EM_DASH)}\n"
-                    f"💰 Цена: {format_price(price)} ₽\n\n"
-                    f"🆚 Создайте поставку.\n\n"
-                    f"🔙 <i>Главное меню</i>",
-                    parse_mode="HTML",
-                    reply_markup=get_create_supply_keyboard(oid) if is_new else None
-                )
+                
+                # Форматируем сообщение с данными из заказа
+                text = format_order_message(order, order_details)
+                
+                # Показываем кнопку "Создать поставку" для ВСЕХ заказов, которые ещё не в поставке
+                if oid not in ud.added_order_ids:
+                    await message.answer(
+                        text,
+                        parse_mode="HTML",
+                        reply_markup=get_create_supply_keyboard(oid)
+                    )
+                else:
+                    await message.answer(
+                        text,
+                        parse_mode="HTML"
+                    )
+                    
                 if is_new:
                     ud.notified_order_ids.append(oid)
                     storage.save_user(user_id, ud)
@@ -175,7 +192,7 @@ async def _check_orders_logic(message):
 
             if new_cnt == 0 and shown_cnt > 0:
                 await message.answer(
-                    f"🌵 Новых заказов нет.\n📦 Всего заказов: {shown_cnt}",
+                    f"📦 Всего заказов: {shown_cnt} (все уже были показаны ранее)",
                     reply_markup=get_main_reply_keyboard()
                 )
             elif new_cnt > 0:
@@ -184,7 +201,7 @@ async def _check_orders_logic(message):
                     reply_markup=get_main_reply_keyboard()
                 )
         else:
-            await message.answer("🌵 Заказов нет.", reply_markup=get_main_reply_keyboard())
+            await message.answer("🌵 Новых заказов нет.", reply_markup=get_main_reply_keyboard())
     except Exception as e:
         await message.answer(f"🚫 Ошибка: {e}")
         logger.error(f"Ошибка: {e}")
@@ -202,36 +219,34 @@ async def cb_create_supply(callback: CallbackQuery):
         await callback.message.answer("🚫 API-ключ не найден.")
         return
 
+    # Делаем СВЕЖИЙ запрос к API — не используем кешированные данные
     client = WBApiClient(api_key)
     try:
         orders = await client.get_new_orders()
-        items = []
-        for o in orders:
-            if o.get("id"):
-                ud = storage.get_user(user_id)
-                if not (o["id"] in ud.added_order_ids or o["id"] in ud.notified_order_ids):
-                    items.append(o)
-        if not items:
-            await callback.message.answer("🚫 Нет новых заказов.")
+        if not orders:
+            await callback.message.answer("🚫 Нет новых заказов для создания поставки.")
             return
 
-        order_details = await get_order_details(client, items)
+        # Получаем детали заказов
+        order_details = await get_order_details(client, orders)
+        
+        # Сохраняем в сессию ВСЕ свежие заказы
         user_sessions[user_id] = {
-            "order_ids": [i["id"] for i in items],
+            "order_ids": [o["id"] for o in orders if o.get("id")],
             "selected_orders": set(),
-            "items": items,
+            "items": orders,
             "trbx_list": [],
             "order_details": order_details,
         }
 
-        text = "📋 <b>Выберите товары:</b>\n\n"
-        for item in items:
-            d = order_details.get(item.get("nmId"), {})
+        text = "📋 <b>Выберите товары для поставки:</b>\n\n"
+        for item in orders:
             price = get_price(item)
-            text += f"🆚 {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
+            article = item.get("article") or EM_DASH
+            text += f"🆔 Артикул: {article} | {format_price(price)} ₽\n"
 
         await callback.message.answer(text, parse_mode="HTML",
-            reply_markup=get_order_items_keyboard(items, order_details, set()))
+            reply_markup=get_order_items_keyboard(orders, order_details, set()))
     except Exception as e:
         await callback.message.answer(f"🚫 Ошибка: {e}")
     finally:
@@ -252,10 +267,10 @@ async def cb_toggle_item(callback: CallbackQuery):
 
     text = "📋 <b>Выберите товары:</b>\n\n"
     for item in s["items"]:
-        d = s["order_details"].get(item.get("nmId"), {})
         cb = "🌵 " if item["id"] in s["selected_orders"] else "🆔 "
         price = get_price(item)
-        text += f"{cb} {d.get('subject', EM_DASH)} | {d.get('color', EM_DASH)} | Арт: {d.get('supplierArticle', EM_DASH)} | {format_price(price)} ₽\n"
+        article = item.get("article") or EM_DASH
+        text += f"{cb} Артикул: {article} | {format_price(price)} ₽\n"
     try:
         await callback.message.edit_text(text, parse_mode="HTML",
             reply_markup=get_order_items_keyboard(s["items"], s["order_details"], s["selected_orders"]))
@@ -296,11 +311,11 @@ async def cb_next_to_trbx(callback: CallbackQuery):
         supply_text = f"🌵 <b>Поставка создана!</b>\n\n📦 ID: <code>{supply_id}</code>\n📦 Товаров: {len(selected_ids)}\n\n"
         for item in s["items"]:
             if item["id"] in s["selected_orders"]:
-                d = s["order_details"].get(item.get("nmId"), {})
                 price = get_price(item)
+                article = item.get("article") or EM_DASH
                 # Convert kopecks to rubles (1 ruble = 100 kopecks)
                 price_rubles = price / 100 if price >= 100 else price
-                supply_text += f"📦 {d.get('subject', EM_DASH)} — {price_rubles} ₽\n"
+                supply_text += f"📦 {article} — {price_rubles} ₽\n"
 
         if client_info:
             supply_text += f"\n<b>Информация о клиенте:</b>\n{client_info}\n"
@@ -339,7 +354,7 @@ async def cb_add_trbx(callback: CallbackQuery):
 
     client = WBApiClient(api_key)
     try:
-        result = await client.create_trbx(s["supply_id"])
+        result = await client.create_trbx(s["supply_id"], list(s["selected_orders"]))
         trbx_id = result.get("id")
         if trbx_id:
             s.setdefault("trbx_list", []).append({"id": trbx_id, "number": len(s["trbx_list"]) + 1})
@@ -455,7 +470,49 @@ async def msg_check_orders_button(message: Message):
 
 @router.message(F.text == "📦 Создать поставку")
 async def msg_create_supply(message: Message):
-    await _check_orders_logic(message)
+    """Создать поставку из всех новых заказов (reply-кнопка)."""
+    user_id = message.from_user.id
+    storage = get_storage()
+    api_key = storage.get_api_key(user_id)
+    if not api_key:
+        await message.answer("🚫 Сначала установите API-ключ через /start или /set_key", parse_mode="HTML")
+        return
+
+    await message.answer("🔍 Проверяю новые заказы для создания поставки...")
+    
+    # Делаем СВЕЖИЙ запрос к API
+    client = WBApiClient(api_key)
+    try:
+        orders = await client.get_new_orders()
+        if not orders:
+            await message.answer("🚫 Нет новых заказов для создания поставки.", reply_markup=get_main_reply_keyboard())
+            return
+
+        # Получаем детали заказов
+        order_details = await get_order_details(client, orders)
+        
+        # Сохраняем в сессию
+        user_sessions[user_id] = {
+            "order_ids": [o["id"] for o in orders if o.get("id")],
+            "selected_orders": set(),
+            "items": orders,
+            "trbx_list": [],
+            "order_details": order_details,
+        }
+
+        text = "📋 <b>Выберите товары для поставки:</b>\n\n"
+        for item in orders:
+            price = get_price(item)
+            article = item.get("article") or EM_DASH
+            text += f"🆔 Артикул: {article} | {format_price(price)} ₽\n"
+
+        await message.answer(text, parse_mode="HTML",
+            reply_markup=get_order_items_keyboard(orders, order_details, set()))
+    except Exception as e:
+        await message.answer(f"🚫 Ошибка: {e}")
+        logger.error(f"Ошибка создания поставки: {e}")
+    finally:
+        await client.close()
 
 
 @router.message(F.text == "❌ Пропустить")
