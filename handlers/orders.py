@@ -354,7 +354,7 @@ async def cb_add_trbx(callback: CallbackQuery):
 
     client = WBApiClient(api_key)
     try:
-        result = await client.create_trbx(s["supply_id"])
+        result = await client.create_trbx(s["supply_id"], list(s["selected_orders"]))
         trbx_id = result.get("id")
         if trbx_id:
             s.setdefault("trbx_list", []).append({"id": trbx_id, "number": len(s["trbx_list"]) + 1})
