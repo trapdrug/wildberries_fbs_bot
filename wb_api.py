@@ -92,7 +92,9 @@ class WBApiClient:
 
         try:
             async with session.request(method, url, **kwargs) as resp:
-                if resp.status == 200 or resp.status == 201:
+                if resp.status in (200, 201, 204):
+                    if resp.status == 204:
+                        return {}
                     return await resp.json() if resp.content_type == "application/json" else {}
 
                 body_text = await resp.text()
